@@ -1,0 +1,24 @@
+# Node
+node_modules/
+frontend/node_modules/
+
+# Env
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+
+# Data
+data/
+
+# OS junk
+.DS_Store
+
+# Logs
+*.log
+
+# Build outputs
+frontend/build/
+backend/.pytest_cache/
