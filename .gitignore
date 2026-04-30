@@ -4,7 +4,6 @@ frontend/node_modules/
 
 # Env
 .env
-.env.*
 
 # Python
 __pycache__/
@@ -22,3 +21,6 @@ data/
 # Build outputs
 frontend/build/
 backend/.pytest_cache/
+
+# VS Code
+.vscode/

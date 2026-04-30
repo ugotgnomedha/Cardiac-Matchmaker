@@ -9,3 +9,6 @@ logs:
 
 backend:
 	docker compose exec backend bash
+
+test-backend:
+	cd backend && pytest
