@@ -3,8 +3,10 @@ FROM python:3.11-slim
 WORKDIR /app
 
 COPY requirements.txt .
+
 RUN pip install --no-cache-dir -r requirements.txt
+RUN apt update && apt install -y curl
 
 COPY app ./app
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "python -m app.cmd.migrate ensure && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app"]
