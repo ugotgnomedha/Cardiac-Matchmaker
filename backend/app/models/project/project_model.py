@@ -1,18 +1,17 @@
 import datetime
 import uuid
-from peewee import UUIDField, CharField, BooleanField, DateTimeField
+
+from peewee import UUIDField, CharField, TextField, DateTimeField
 
 from app.models.base.base_model import BaseModel
 
 def utc_now() -> datetime.datetime:
     return datetime.datetime.now(datetime.timezone.utc)
 
-class User(BaseModel):
+class ResearchProject(BaseModel):
     id = UUIDField(primary_key=True, default=uuid.uuid4)
-    email = CharField(unique=True)
-    password_hash = CharField()
-    is_active = BooleanField(default=True)
-    is_superuser = BooleanField(default=False)
+    name = CharField(max_length=255)
+    description = TextField(null=True)
     created_at = DateTimeField(default=utc_now)
     updated_at = DateTimeField(default=utc_now)
 
@@ -21,4 +20,4 @@ class User(BaseModel):
         return super().save(*args, **kwargs)
 
     class Meta:  # pyrefly: ignore
-        table_name = "user"
+        table_name = "research_project"
