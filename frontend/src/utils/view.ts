@@ -3,7 +3,12 @@ export function formatDate(value: string | null | undefined) {
     return "Not set";
   }
 
-  return new Date(value).toLocaleString(undefined, {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Not set";
+  }
+
+  return date.toLocaleString(undefined, {
     year: "numeric",
     month: "short",
     day: "numeric",

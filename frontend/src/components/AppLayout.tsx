@@ -10,8 +10,6 @@ export type BreadcrumbItem = {
 
 type AppLayoutProps = {
   actions?: ReactNode;
-  backLabel?: string;
-  backTo?: string;
   breadcrumbs?: BreadcrumbItem[];
   children: ReactNode;
   maxWidthClassName?: string;
