@@ -11,18 +11,12 @@ export function ProtectedRoute() {
   if (isLoading) {
     return (
       <section className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
-        <Card className="w-full max-w-lg rounded-[2rem] border border-white/70 bg-white/85 shadow-[0_24px_90px_-40px_rgba(120,53,15,0.55)] backdrop-blur-xl">
-          <Card.Content className="space-y-4 p-8 text-center sm:p-10">
-            <span className="text-xs font-semibold uppercase tracking-[0.32em] text-amber-700">
-              Session Check
-            </span>
-            <h1 className="text-3xl font-semibold text-stone-900 sm:text-4xl">
-              Checking your access.
+        <Card className="w-full max-w-lg rounded-lg border border-zinc-200 bg-white">
+          <Card.Content className="space-y-3 p-8 text-center">
+            <h1 className="text-2xl font-semibold text-zinc-950">
+              Checking access
             </h1>
-            <p className="text-sm text-stone-600 sm:text-base">
-              Reading current cookie-backed session before rendering protected
-              pages.
-            </p>
+            <p className="text-sm text-zinc-600">Loading...</p>
           </Card.Content>
         </Card>
       </section>
@@ -32,17 +26,12 @@ export function ProtectedRoute() {
   if (error) {
     return (
       <section className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
-        <Card className="w-full max-w-lg rounded-[2rem] border border-white/70 bg-white/90 shadow-[0_24px_90px_-40px_rgba(120,53,15,0.55)] backdrop-blur-xl">
-          <Card.Content className="space-y-5 p-8 text-center sm:p-10">
-            <span className="text-xs font-semibold uppercase tracking-[0.32em] text-rose-700">
-              Auth Error
-            </span>
-            <h1 className="text-3xl font-semibold text-stone-900 sm:text-4xl">
-              Authentication service unavailable.
+        <Card className="w-full max-w-lg rounded-lg border border-rose-200 bg-white">
+          <Card.Content className="space-y-4 p-8 text-center">
+            <h1 className="text-2xl font-semibold text-zinc-950">
+              Authentication unavailable
             </h1>
-            <p className="text-sm text-stone-600 sm:text-base">
-              {error.message}
-            </p>
+            <p className="text-sm text-rose-700">{error.message}</p>
             <Button onPress={() => navigate("/login", { replace: true })}>
               Go to login
             </Button>
