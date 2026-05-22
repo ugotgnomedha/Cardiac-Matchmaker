@@ -1,7 +1,8 @@
-import { Button, Card, Input } from "@heroui/react";
+import { Button, Card, Form } from "@heroui/react";
 import { startTransition, useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
+import { FormFields, type FormFieldConfig } from "../components/FormFields";
 import { useAuth } from "../hooks/useAuth";
 import { isApiError } from "../utils/api";
 
@@ -23,6 +24,33 @@ export function LoginPage() {
   if (user) {
     return <Navigate to={redirectTo} replace />;
   }
+
+  const loginFields: FormFieldConfig[] = [
+    {
+      autoComplete: "email",
+      description: "Use the account email created for this workspace.",
+      kind: "input",
+      label: "Email address",
+      name: "email",
+      onChange: setEmail,
+      placeholder: "researcher@example.com",
+      required: true,
+      type: "email",
+      value: email,
+    },
+    {
+      autoComplete: "current-password",
+      description: "Enter the password for the selected research account.",
+      kind: "input",
+      label: "Password",
+      name: "password",
+      onChange: setPassword,
+      placeholder: "Password",
+      required: true,
+      type: "password",
+      value: password,
+    },
+  ];
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,44 +75,20 @@ export function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <Card className="rounded-[2rem] border backdrop-blur-xl">
-          <Card.Header className="space-y-3 px-8 pt-8 pb-0 sm:px-10 sm:pt-10">
-            Login
+    <main className="min-h-screen bg-white px-4 py-6 text-zinc-950 sm:px-6 lg:px-8">
+      <div className="mx-auto grid max-w-md gap-6">
+        <Card className="rounded-lg border border-zinc-200 bg-white">
+          <Card.Header className="space-y-3 px-6 pt-6 pb-0">
+            <h1 className="text-2xl font-semibold tracking-normal">Login</h1>
           </Card.Header>
 
-          <Card.Content className="px-8 py-8 sm:px-10 sm:py-10">
-            <form className="space-y-5" onSubmit={handleSubmit}>
-              <label className="block space-y-2 text-sm font-medium text-stone-700">
-                <span>Email</span>
-                <Input
-                  autoComplete="email"
-                  fullWidth
-                  name="email"
-                  onChange={(event) => setEmail(event.target.value)}
-                  required
-                  type="email"
-                  value={email}
-                />
-              </label>
-
-              <label className="block space-y-2 text-sm font-medium text-stone-700">
-                <span>Password</span>
-                <Input
-                  autoComplete="current-password"
-                  fullWidth
-                  name="password"
-                  onChange={(event) => setPassword(event.target.value)}
-                  required
-                  type="password"
-                  value={password}
-                />
-              </label>
+          <Card.Content className="px-6 py-6">
+            <Form className="space-y-5" onSubmit={handleSubmit}>
+              <FormFields fields={loginFields} />
 
               {errorMessage ? (
                 <p
-                  className="rounded-2xl border px-4 py-3 text-sm text-rose-700"
+                  className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
                   role="alert"
                 >
                   {errorMessage}
@@ -94,7 +98,7 @@ export function LoginPage() {
               <Button fullWidth isDisabled={isSubmitting} type="submit">
                 {isSubmitting ? "Signing in..." : "Login"}
               </Button>
-            </form>
+            </Form>
           </Card.Content>
         </Card>
       </div>
