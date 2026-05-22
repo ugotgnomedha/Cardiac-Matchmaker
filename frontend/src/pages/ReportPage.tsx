@@ -33,8 +33,6 @@ export function ReportPage() {
           </span>
         ) : null
       }
-      backLabel="Back to run"
-      backTo={`/runs/${runId}`}
       breadcrumbs={[
         { label: "Projects", to: "/" },
         ...(run
@@ -61,38 +59,38 @@ export function ReportPage() {
         </section>
       ) : (
         <section className="grid gap-5">
-            <div className="rounded-lg border border-zinc-200 bg-white p-5">
-              <dl className="grid gap-3 text-sm sm:grid-cols-3">
-                <div>
-                  <dt className="font-medium text-zinc-500">Created</dt>
-                  <dd>{formatDate(report.created_at)}</dd>
-                </div>
-                <div>
-                  <dt className="font-medium text-zinc-500">Updated</dt>
-                  <dd>{formatDate(report.updated_at)}</dd>
-                </div>
-                <div>
-                  <dt className="font-medium text-zinc-500">Storage Path</dt>
-                  <dd className="break-all">
-                    {report.storage_path ?? "Not set"}
-                  </dd>
-                </div>
-              </dl>
-            </div>
+          <div className="rounded-lg border border-zinc-200 bg-white p-5">
+            <dl className="grid gap-3 text-sm sm:grid-cols-3">
+              <div>
+                <dt className="font-medium text-zinc-500">Created</dt>
+                <dd>{formatDate(report.created_at)}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-zinc-500">Updated</dt>
+                <dd>{formatDate(report.updated_at)}</dd>
+              </div>
+              <div>
+                <dt className="font-medium text-zinc-500">Storage Path</dt>
+                <dd className="break-all">
+                  {report.storage_path ?? "Not set"}
+                </dd>
+              </div>
+            </dl>
+          </div>
 
-            {report.markdown_body ? (
-              <article className="rounded-lg border border-zinc-200 bg-white p-5">
-                <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-zinc-800">
-                  {report.markdown_body}
-                </pre>
-              </article>
-            ) : null}
-
-            {report.json_body ? (
-              <pre className="overflow-auto rounded-lg border border-zinc-200 bg-zinc-50 p-5 text-sm text-zinc-800">
-                {JSON.stringify(report.json_body, null, 2)}
+          {report.markdown_body ? (
+            <article className="rounded-lg border border-zinc-200 bg-white p-5">
+              <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-zinc-800">
+                {report.markdown_body}
               </pre>
-            ) : null}
+            </article>
+          ) : null}
+
+          {report.json_body ? (
+            <pre className="overflow-auto rounded-lg border border-zinc-200 bg-zinc-50 p-5 text-sm text-zinc-800">
+              {JSON.stringify(report.json_body, null, 2)}
+            </pre>
+          ) : null}
         </section>
       )}
     </AppLayout>

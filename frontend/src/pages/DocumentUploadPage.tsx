@@ -105,7 +105,6 @@ export function DocumentUploadPage() {
 
   return (
     <AppLayout
-      backTo={`/projects/${currentProjectId}`}
       breadcrumbs={[
         { label: "Projects", to: "/" },
         { label: "Project", to: `/projects/${currentProjectId}` },

@@ -105,7 +105,6 @@ export function NewRunPage() {
 
   return (
     <AppLayout
-      backTo={`/projects/${currentProjectId}`}
       breadcrumbs={[
         { label: "Projects", to: "/" },
         { label: "Project", to: `/projects/${currentProjectId}` },

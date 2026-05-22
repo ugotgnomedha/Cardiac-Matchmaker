@@ -54,7 +54,6 @@ export function ProjectDetailPage() {
           </>
         )
       }
-      backTo="/"
       breadcrumbs={[
         { label: "Projects", to: "/" },
         { label: project?.name ?? "Project" },
