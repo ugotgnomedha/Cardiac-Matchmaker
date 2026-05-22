@@ -5,9 +5,15 @@ frontend/node_modules/
 # Env
 .env
 
+
+
 # Python
 __pycache__/
 *.pyc
+.venv/
+.env/
+venv/
+env/
 
 # Data
 data/
