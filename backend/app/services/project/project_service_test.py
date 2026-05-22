@@ -1,4 +1,5 @@
-from uuid import uuid4
+from typing import cast
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -21,7 +22,7 @@ def test_project_service_creates_gets_and_lists_project(service_context):
             description="  Demo workflow  ",
         )
     )
-    service_context.track_project(created_project.id)
+    service_context.track_project(cast(UUID, created_project.id))
 
     fetched_project = service.get_project(created_project.id)
     listed_project_ids = {project.id for project in service.list_projects()}

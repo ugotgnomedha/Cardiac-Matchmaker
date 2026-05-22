@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -33,7 +34,7 @@ class ServiceTestContext:
             name=name or f"Service Test Project {uuid4()}",
             description=description,
         )
-        self.track_project(project.id)
+        self.track_project(cast(UUID, project.id))
         return project
 
     def track_project(self, project_id: UUID) -> None:
