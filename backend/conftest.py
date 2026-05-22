@@ -21,7 +21,7 @@ def migrated_db():
 
 @dataclass
 class ServiceTestContext:
-    project_ids: set[str] = field(default_factory=set)
+    project_ids: set[UUID] = field(default_factory=set)
 
     def create_project_model(
         self,
@@ -38,7 +38,23 @@ class ServiceTestContext:
         return project
 
     def track_project(self, project_id: UUID) -> None:
-        self.project_ids.add(str(project_id))
+        self.project_ids.add(project_id)
+
+    def _payload_project_id(self, payload: object) -> UUID | None:
+        if not isinstance(payload, dict):
+            return None
+
+        project_id = payload.get("project_id")
+        if isinstance(project_id, UUID):
+            return project_id
+
+        if isinstance(project_id, str):
+            try:
+                return UUID(project_id)
+            except ValueError:
+                return None
+
+        return None
 
     def cleanup(self) -> None:
         if not self.project_ids:
@@ -46,7 +62,7 @@ class ServiceTestContext:
 
         for job in ProcessingJob.select():
             payload = job.payload or {}
-            if payload.get("project_id") in self.project_ids:
+            if self._payload_project_id(payload) in self.project_ids:
                 job.delete_instance()
 
         for project_id in self.project_ids:

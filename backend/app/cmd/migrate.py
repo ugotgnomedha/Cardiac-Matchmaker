@@ -255,14 +255,36 @@ def get_table_columns(table_name: str) -> set[str]:
 	return {column.name for column in db.get_columns(table_name)}
 
 
+def get_missing_table_columns(table_expectations: dict[str, set[str]]) -> dict[str, list[str]]:
+	missing_columns_by_table: dict[str, list[str]] = {}
+	for table_name, expected_columns in table_expectations.items():
+		missing_columns = sorted(expected_columns - get_table_columns(table_name))
+		if missing_columns:
+			missing_columns_by_table[table_name] = missing_columns
+	return missing_columns_by_table
+
+
 def initial_user_schema_is_satisfied() -> bool:
 	return EXPECTED_USER_COLUMNS.issubset(get_user_columns())
 
 
 def tables_schema_is_satisfied(table_expectations: dict[str, set[str]]) -> bool:
-	return all(
-		expected_columns.issubset(get_table_columns(table_name))
-		for table_name, expected_columns in table_expectations.items()
+	return not get_missing_table_columns(table_expectations)
+
+
+def raise_partial_schema_error(schema_name: str, table_expectations: dict[str, set[str]]) -> None:
+	missing_columns_by_table = get_missing_table_columns(table_expectations)
+	if not missing_columns_by_table:
+		return
+
+	missing_details = "; ".join(
+		f"{table_name} -> {', '.join(columns)}"
+		for table_name, columns in missing_columns_by_table.items()
+	)
+	raise RuntimeError(
+		f"{schema_name} schema migration could not repair an existing partial schema automatically. "
+		f"Missing columns by table: {missing_details}. "
+		"Add the missing columns manually or implement an explicit column migration."
 	)
 
 
@@ -332,8 +354,7 @@ def apply_initial_user_schema(migrator: PostgresqlMigrator) -> None:
 def apply_project_dataset_schema(_migrator: PostgresqlMigrator) -> None:
 	db.create_tables([ResearchProject, Dataset, DatasetVersion], safe=True)
 
-	if not project_dataset_schema_is_satisfied():
-		raise RuntimeError("Project and dataset schema migration did not complete successfully")
+	raise_partial_schema_error("Project and dataset", PROJECT_DATASET_TABLE_EXPECTATIONS)
 
 
 def apply_workflow_schema(_migrator: PostgresqlMigrator) -> None:
@@ -352,8 +373,7 @@ def apply_workflow_schema(_migrator: PostgresqlMigrator) -> None:
 		safe=True,
 	)
 
-	if not workflow_schema_is_satisfied():
-		raise RuntimeError("Workflow schema migration did not complete successfully")
+	raise_partial_schema_error("Workflow", WORKFLOW_TABLE_EXPECTATIONS)
 
 
 def get_migrations() -> list[MigrationDefinition]:
