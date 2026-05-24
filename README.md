@@ -21,6 +21,16 @@ FastAPI + Peewee + cookie JWT auth. `POST /api/v1/auth/login` sets `access_token
 docker compose exec backend python -m app.cmd.create_user admin@example.com --superuser
 ```
 
+## Demo data
+
+Create the development storage layout and seed a demo research project:
+
+```bash
+docker compose exec backend python -m app.cmd.seed_demo
+```
+
+The seed command creates `data/raw`, `data/processed`, `data/pdfs`, `data/logs`, and `data/reports`.
+
 ## .env
 
 ```env
