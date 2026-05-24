@@ -6,19 +6,22 @@ from app.models.evidence.evidence_model import ContradictionWarning, EvidenceIte
 from app.models.job.job_model import ProcessingJob
 from app.models.report.report_model import Report
 from app.models.run.run_model import AnalysisRun, AnalysisStep, CandidateMatch
+from app.models.sample.sample_model import Sample, Measurement
 
 __all__ = [
-    "AnalysisRun",
-    "AnalysisStep",
-    "CandidateMatch",
-    "ContradictionWarning",
+    "User",
+    "ResearchProject",
     "Dataset",
     "DatasetVersion",
     "Document",
     "DocumentChunk",
+    "ContradictionWarning",
     "EvidenceItem",
     "ProcessingJob",
     "Report",
-    "ResearchProject",
-    "User",
+    "AnalysisRun",
+    "AnalysisStep",
+    "CandidateMatch",
+    "Sample",
+    "Measurement",
 ]
