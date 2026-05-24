@@ -15,6 +15,7 @@ from app.models.project.project_model import ResearchProject
 from app.models.report.report_model import Report
 from app.models.run.run_model import AnalysisRun, AnalysisStep, CandidateMatch
 from app.models.user.user_model import User
+from app.models.sample.sample_model import Sample, Measurement
 
 
 USER_TABLE_NAME = "user"
@@ -197,6 +198,23 @@ EXPECTED_PROCESSING_JOB_COLUMNS = {
 	"started_at",
 	"finished_at",
 }
+EXPECTED_SAMPLE_COLUMNS = {
+    "id",
+    "dataset_version_id",
+    "name",
+    "type",
+    "metadata",
+    "created_at",
+}
+EXPECTED_MEASUREMENT_COLUMNS = {
+    "id",
+    "sample_id",
+    "feature_name",
+    "raw_value",
+    "normalized_value",
+    "unit",
+    "created_at",
+}
 PROJECT_DATASET_TABLE_EXPECTATIONS = {
 	PROJECT_TABLE_NAME: EXPECTED_PROJECT_COLUMNS,
 	DATASET_TABLE_NAME: EXPECTED_DATASET_COLUMNS,
@@ -218,6 +236,10 @@ PLAYHOUSE_MANAGED_USER_COLUMNS = {
 	"is_superuser",
 	"created_at",
 	"updated_at",
+}
+SAMPLE_MEASUREMENT_TABLE_EXPECTATIONS = {
+    "sample": EXPECTED_SAMPLE_COLUMNS,
+    "measurement": EXPECTED_MEASUREMENT_COLUMNS,
 }
 
 
@@ -294,6 +316,9 @@ def project_dataset_schema_is_satisfied() -> bool:
 
 def workflow_schema_is_satisfied() -> bool:
 	return tables_schema_is_satisfied(WORKFLOW_TABLE_EXPECTATIONS)
+
+def sample_measurement_schema_is_satisfied() -> bool:
+    return tables_schema_is_satisfied(SAMPLE_MEASUREMENT_TABLE_EXPECTATIONS)
 
 
 def ensure_migration_table() -> None:
@@ -375,6 +400,9 @@ def apply_workflow_schema(_migrator: PostgresqlMigrator) -> None:
 
 	raise_partial_schema_error("Workflow", WORKFLOW_TABLE_EXPECTATIONS)
 
+def apply_sample_measurement_schema(_migrator: PostgresqlMigrator) -> None:
+    db.create_tables([Sample, Measurement], safe=True)
+    raise_partial_schema_error("Sample and measurement", SAMPLE_MEASUREMENT_TABLE_EXPECTATIONS)
 
 def get_migrations() -> list[MigrationDefinition]:
 	return [
@@ -396,6 +424,12 @@ def get_migrations() -> list[MigrationDefinition]:
 			is_satisfied=workflow_schema_is_satisfied,
 			apply=apply_workflow_schema,
 		),
+		MigrationDefinition(
+            name="0004_sample_measurement_schema",
+            description="Create sample and measurement tables for parsed biological data",
+            is_satisfied=sample_measurement_schema_is_satisfied,
+            apply=apply_sample_measurement_schema,
+        ),
 	]
 
 
