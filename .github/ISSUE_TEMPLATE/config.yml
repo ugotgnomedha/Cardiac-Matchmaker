@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Project repository
+    url: https://github.com/ugotgnomedha/Cardiac-Matchmaker
+    about: Read the README and project setup notes before opening setup questions.

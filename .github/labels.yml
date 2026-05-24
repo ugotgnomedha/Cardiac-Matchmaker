@@ -1,0 +1,30 @@
+- name: backend
+  color: "1d76db"
+  description: Backend API, models, services, repositories, and database work
+- name: frontend
+  color: "0e8a16"
+  description: React UI, pages, components, and client-side behavior
+- name: worker
+  color: "5319e7"
+  description: Background jobs, data processing, and pipeline execution
+- name: data
+  color: "fbca04"
+  description: Dataset ingestion, preprocessing, normalization, and storage
+- name: research
+  color: "c2e0c6"
+  description: Literature retrieval, evidence, matching logic, and explainability
+- name: bug
+  color: "d73a4a"
+  description: Something is broken or behaves incorrectly
+- name: task
+  color: "c5def5"
+  description: Planned implementation work
+- name: documentation
+  color: "0075ca"
+  description: README, project notes, templates, and developer documentation
+- name: ci
+  color: "fef2c0"
+  description: GitHub Actions, checks, linting, tests, and build setup
+- name: good first issue
+  color: "7057ff"
+  description: Small, clear task suitable for a first contribution
