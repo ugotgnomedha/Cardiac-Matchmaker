@@ -53,11 +53,11 @@ def test_sample_measurement_creation():
         assert sample.id == measurement.sample.id
         assert sample.dataset_version.id == version.id
 
-        samples_from_version = list(version.samples)
+        samples_from_version = list(version.samples)  # pyrefly: ignore
         assert len(samples_from_version) == 1
         assert samples_from_version[0].id == sample.id
 
-        measurements_from_sample = list(sample.measurements)
+        measurements_from_sample = list(sample.measurements)  # pyrefly: ignore
         assert len(measurements_from_sample) == 1
         assert measurements_from_sample[0].id == measurement.id
 
