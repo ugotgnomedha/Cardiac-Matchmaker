@@ -16,6 +16,7 @@ from app.models.report.report_model import Report
 from app.models.run.run_model import AnalysisRun, AnalysisStep, CandidateMatch
 from app.models.user.user_model import User
 from app.models.sample.sample_model import Sample, Measurement
+from app.models.preprocessing.preprocessing_run_model import PreprocessingRun
 
 
 USER_TABLE_NAME = "user"
@@ -32,6 +33,7 @@ EVIDENCE_ITEM_TABLE_NAME = "evidence_item"
 CONTRADICTION_WARNING_TABLE_NAME = "contradiction_warning"
 REPORT_TABLE_NAME = "report"
 PROCESSING_JOB_TABLE_NAME = "processing_job"
+PREPROCESSING_RUN_TABLE_NAME = "preprocessing_run"
 
 
 def utc_now() -> datetime:
@@ -215,6 +217,18 @@ EXPECTED_MEASUREMENT_COLUMNS = {
     "unit",
     "created_at",
 }
+EXPECTED_PREPROCESSING_RUN_COLUMNS = {
+	"id",
+	"dataset_version_id",
+	"status",
+	"config",
+	"log_path",
+	"error_message",
+	"started_at",
+	"finished_at",
+	"created_at",
+	"updated_at",
+}
 PROJECT_DATASET_TABLE_EXPECTATIONS = {
 	PROJECT_TABLE_NAME: EXPECTED_PROJECT_COLUMNS,
 	DATASET_TABLE_NAME: EXPECTED_DATASET_COLUMNS,
@@ -240,6 +254,9 @@ PLAYHOUSE_MANAGED_USER_COLUMNS = {
 SAMPLE_MEASUREMENT_TABLE_EXPECTATIONS = {
     "sample": EXPECTED_SAMPLE_COLUMNS,
     "measurement": EXPECTED_MEASUREMENT_COLUMNS,
+}
+PREPROCESSING_RUN_TABLE_EXPECTATIONS = {
+	PREPROCESSING_RUN_TABLE_NAME: EXPECTED_PREPROCESSING_RUN_COLUMNS,
 }
 
 
@@ -319,6 +336,9 @@ def workflow_schema_is_satisfied() -> bool:
 
 def sample_measurement_schema_is_satisfied() -> bool:
     return tables_schema_is_satisfied(SAMPLE_MEASUREMENT_TABLE_EXPECTATIONS)
+
+def preprocessing_run_schema_is_satisfied() -> bool:
+	return tables_schema_is_satisfied(PREPROCESSING_RUN_TABLE_EXPECTATIONS)
 
 
 def ensure_migration_table() -> None:
@@ -404,6 +424,10 @@ def apply_sample_measurement_schema(_migrator: PostgresqlMigrator) -> None:
     db.create_tables([Sample, Measurement], safe=True)
     raise_partial_schema_error("Sample and measurement", SAMPLE_MEASUREMENT_TABLE_EXPECTATIONS)
 
+def apply_preprocessing_run_schema(_migrator: PostgresqlMigrator) -> None:
+	db.create_tables([PreprocessingRun], safe=True)
+	raise_partial_schema_error("Preprocessing run", PREPROCESSING_RUN_TABLE_EXPECTATIONS)
+
 def get_migrations() -> list[MigrationDefinition]:
 	return [
 		MigrationDefinition(
@@ -430,6 +454,12 @@ def get_migrations() -> list[MigrationDefinition]:
             is_satisfied=sample_measurement_schema_is_satisfied,
             apply=apply_sample_measurement_schema,
         ),
+		MigrationDefinition(
+			name="0005_preprocessing_run_schema",
+			description="Create preprocessing_run table for tracking data preparation jobs",
+			is_satisfied=preprocessing_run_schema_is_satisfied,
+			apply=apply_preprocessing_run_schema,
+		),
 	]
 
 

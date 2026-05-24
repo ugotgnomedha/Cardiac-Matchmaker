@@ -7,6 +7,7 @@ from app.models.job.job_model import ProcessingJob
 from app.models.report.report_model import Report
 from app.models.run.run_model import AnalysisRun, AnalysisStep, CandidateMatch
 from app.models.sample.sample_model import Sample, Measurement
+from app.models.preprocessing.preprocessing_run_model import PreprocessingRun
 
 __all__ = [
     "User",
@@ -24,4 +25,5 @@ __all__ = [
     "CandidateMatch",
     "Sample",
     "Measurement",
+    "PreprocessingRun",
 ]
