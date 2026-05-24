@@ -45,13 +45,13 @@ class DataPreparationService:
 
         try:
             self._parse_and_store(dataset_version_id, file_path, run)
-            run.status = "completed"
-            run.finished_at = datetime.datetime.now(datetime.timezone.utc)
+            run.status = "completed"  # pyrefly: ignore
+            run.finished_at = datetime.datetime.now(datetime.timezone.utc)  # pyrefly: ignore
             run.save()
         except Exception as e:
-            run.status = "failed"
-            run.error_message = str(e)
-            run.finished_at = datetime.datetime.now(datetime.timezone.utc)
+            run.status = "failed"  # pyrefly: ignore
+            run.error_message = str(e)  # pyrefly: ignore
+            run.finished_at = datetime.datetime.now(datetime.timezone.utc)  # pyrefly: ignore
             run.save()
             raise DataPreparationError(f"Ingestion failed: {e}") from e
 
@@ -104,5 +104,5 @@ class DataPreparationService:
 
             # update the DatasetVersion status
             dataset_version = DatasetVersion.get_by_id(dataset_version_id)
-            dataset_version.status = "normalized"
+            dataset_version.status = "normalized"  # pyrefly: ignore
             dataset_version.save()

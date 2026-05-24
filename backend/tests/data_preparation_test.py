@@ -49,7 +49,7 @@ def test_ingest_tsv_creates_samples_and_measurements():
 
     try:
         service = DataPreparationService()
-        run = service.ingest_dataset_version(version.id, tmp_path)
+        run = service.ingest_dataset_version(version.id, tmp_path)  # pyrefly: ignore
 
         # Check preprocessing run status
         assert run.status == "completed"
