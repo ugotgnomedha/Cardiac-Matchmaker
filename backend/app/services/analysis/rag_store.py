@@ -75,7 +75,7 @@ class QdrantVectorStore:
                 offset=offset,
             )
             for point in points:
-                out[str(point.id)] = point.vector
+                out[str(point.id)] = point.vector  # pyrefly: ignore
             if offset is None:
                 break
         return out

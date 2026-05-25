@@ -104,7 +104,7 @@ class SentenceTransformerEmbedder:
         """The underlying SentenceTransformer, loaded on first access."""
         if self._model is None:
             os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-            from sentence_transformers import SentenceTransformer
+            from sentence_transformers import SentenceTransformer  # pyrefly: ignore
 
             self._model = SentenceTransformer(self.model_name)
         return self._model

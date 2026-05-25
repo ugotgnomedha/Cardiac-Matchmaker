@@ -60,7 +60,7 @@ def test_drivers_and_translate_shapes():
     """Drivers are ranked by contribution and translate ranks all structures."""
     alignment = A.fit(_synthetic_data(), method="cca")
     best = alignment.best_match_per_region()
-    prep = best.loc["SL-Valves", "best_prep"]
+    prep = str(best.loc["SL-Valves", "best_prep"])
 
     drivers = alignment.drivers(prep, "SL-Valves", top=5)
     assert len(drivers) == 5

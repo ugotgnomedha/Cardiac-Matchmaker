@@ -1,6 +1,6 @@
 """Unit tests for build_matrices: replicate averaging, heart filtering, and annotation."""
 
-import math
+import pandas as pd
 
 from app.services.analysis import constants as C
 from app.services.analysis.proteomics import build_matrices
@@ -51,7 +51,7 @@ def test_heart_matrix_keeps_only_heart_proteins_over_all_structures():
     assert set(heart.index) == {"A", "B"}
     assert list(heart.columns) == C.HEART_REGIONS
     assert heart.loc["A", "SL-Valves"] == 20.0
-    assert math.isnan(heart.loc["A", "Atrium"])
+    assert pd.isna(heart.loc["A", "Atrium"])
 
 
 def test_annotation_tracks_matrisome_category():
