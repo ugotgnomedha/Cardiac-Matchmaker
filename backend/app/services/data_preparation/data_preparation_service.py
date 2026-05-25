@@ -7,8 +7,17 @@ from uuid import UUID, uuid4
 
 from app.models.base.base_model import db
 from app.models.dataset.dataset_model import DatasetVersion
+from app.models.feature.feature_model import FeatureAnnotation
 from app.models.preprocessing.preprocessing_run_model import PreprocessingRun
 from app.models.sample.sample_model import Sample, Measurement
+
+
+def _clean(value: Any) -> str | None:
+    """Normalise a TSV cell: blanks and explicit NA become None."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return None if text in ("", "NA") else text
 
 
 class DataPreparationError(Exception):
@@ -25,7 +34,9 @@ class DataPreparationService:
         "MatrisomeCategory", "match_in_heart"
     }
 
-    HEART_SAMPLE_PATTERNS = ["largeArtery", "coronaryArtery", "Atrium", "Ventricle", "AV-Valves", "SL-Valves"]
+    # "largeAtery" (sic) is the spelling used in the source proteomics file;
+    # "largeArtery" is kept so earlier fixtures keep classifying correctly.
+    HEART_SAMPLE_PATTERNS = ["largeArtery", "largeAtery", "coronaryArtery", "Atrium", "Ventricle", "AV-Valves", "SL-Valves"]
 
     def ingest_dataset_version(
         self,
@@ -66,6 +77,7 @@ class DataPreparationService:
             sample_columns = [col for col in reader.fieldnames if col not in self.METADATA_COLUMNS]
 
             sample_map = {}  # column_name -> Sample instance
+            annotations: dict[str, dict[str, Any]] = {}  # GeneName -> annotation fields
             with db.atomic():
                 for col in sample_columns:
                     sample_type = "heart_region" if any(pat in col for pat in self.HEART_SAMPLE_PATTERNS) else "placenta_region"
@@ -82,6 +94,8 @@ class DataPreparationService:
                     gene_name = row.get("GeneName", "").strip()
                     if not gene_name:
                         continue  # skip rows without gene name
+
+                    self._collect_annotation(annotations, gene_name, row)
 
                     for col, value in row.items():
                         if col not in sample_map:
@@ -102,7 +116,46 @@ class DataPreparationService:
                             unit="log2 intensity",
                         )
 
+                self._store_annotations(dataset_version_id, annotations)
+
             # update the DatasetVersion status
             dataset_version = DatasetVersion.get_by_id(dataset_version_id)
             dataset_version.status = "normalized"  # pyrefly: ignore
             dataset_version.save()
+
+    def _collect_annotation(self, annotations: dict[str, dict[str, Any]], gene_name: str, row: dict[str, Any]) -> None:
+        """Accumulate one feature's annotation from a TSV row.
+
+        The same gene can appear on several rows; descriptive fields take the
+        first non-empty value and ``present_in_heart`` is true if any row flags it.
+        """
+        present = (str(row.get("match_in_heart", "")).strip().upper() == "TRUE")
+        existing = annotations.get(gene_name)
+        if existing is None:
+            annotations[gene_name] = {
+                "uniprot": _clean(row.get("UniProt")),
+                "matrisome_division": _clean(row.get("MatrisomeDivision")),
+                "matrisome_category": _clean(row.get("MatrisomeCategory")),
+                "location": _clean(row.get("Location")),
+                "present_in_heart": present,
+            }
+            return
+        existing["present_in_heart"] = existing["present_in_heart"] or present
+        for field, column in (
+            ("uniprot", "UniProt"),
+            ("matrisome_division", "MatrisomeDivision"),
+            ("matrisome_category", "MatrisomeCategory"),
+            ("location", "Location"),
+        ):
+            if existing[field] is None:
+                existing[field] = _clean(row.get(column))
+
+    def _store_annotations(self, dataset_version_id: UUID, annotations: dict[str, dict[str, Any]]) -> None:
+        """Persist the collected per-feature annotations."""
+        for gene_name, fields in annotations.items():
+            FeatureAnnotation.create(
+                id=uuid4(),
+                dataset_version=dataset_version_id,
+                feature_name=gene_name,
+                **fields,
+            )

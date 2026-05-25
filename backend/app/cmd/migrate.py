@@ -10,6 +10,7 @@ from app.models.base.base_model import db
 from app.models.dataset.dataset_model import Dataset, DatasetVersion
 from app.models.document.document_model import Document, DocumentChunk
 from app.models.evidence.evidence_model import ContradictionWarning, EvidenceItem
+from app.models.feature.feature_model import FeatureAnnotation
 from app.models.job.job_model import ProcessingJob
 from app.models.project.project_model import ResearchProject
 from app.models.report.report_model import Report
@@ -34,6 +35,7 @@ CONTRADICTION_WARNING_TABLE_NAME = "contradiction_warning"
 REPORT_TABLE_NAME = "report"
 PROCESSING_JOB_TABLE_NAME = "processing_job"
 PREPROCESSING_RUN_TABLE_NAME = "preprocessing_run"
+FEATURE_ANNOTATION_TABLE_NAME = "feature_annotation"
 
 
 def utc_now() -> datetime:
@@ -229,6 +231,17 @@ EXPECTED_PREPROCESSING_RUN_COLUMNS = {
 	"created_at",
 	"updated_at",
 }
+EXPECTED_FEATURE_ANNOTATION_COLUMNS = {
+    "id",
+    "dataset_version_id",
+    "feature_name",
+    "uniprot",
+    "matrisome_division",
+    "matrisome_category",
+    "location",
+    "present_in_heart",
+    "created_at",
+}
 PROJECT_DATASET_TABLE_EXPECTATIONS = {
 	PROJECT_TABLE_NAME: EXPECTED_PROJECT_COLUMNS,
 	DATASET_TABLE_NAME: EXPECTED_DATASET_COLUMNS,
@@ -257,6 +270,9 @@ SAMPLE_MEASUREMENT_TABLE_EXPECTATIONS = {
 }
 PREPROCESSING_RUN_TABLE_EXPECTATIONS = {
 	PREPROCESSING_RUN_TABLE_NAME: EXPECTED_PREPROCESSING_RUN_COLUMNS,
+}
+FEATURE_ANNOTATION_TABLE_EXPECTATIONS = {
+    FEATURE_ANNOTATION_TABLE_NAME: EXPECTED_FEATURE_ANNOTATION_COLUMNS,
 }
 
 
@@ -339,6 +355,10 @@ def sample_measurement_schema_is_satisfied() -> bool:
 
 def preprocessing_run_schema_is_satisfied() -> bool:
 	return tables_schema_is_satisfied(PREPROCESSING_RUN_TABLE_EXPECTATIONS)
+
+
+def feature_annotation_schema_is_satisfied() -> bool:
+    return tables_schema_is_satisfied(FEATURE_ANNOTATION_TABLE_EXPECTATIONS)
 
 
 def ensure_migration_table() -> None:
@@ -428,6 +448,11 @@ def apply_preprocessing_run_schema(_migrator: PostgresqlMigrator) -> None:
 	db.create_tables([PreprocessingRun], safe=True)
 	raise_partial_schema_error("Preprocessing run", PREPROCESSING_RUN_TABLE_EXPECTATIONS)
 
+
+def apply_feature_annotation_schema(_migrator: PostgresqlMigrator) -> None:
+    db.create_tables([FeatureAnnotation], safe=True)
+    raise_partial_schema_error("Feature annotation", FEATURE_ANNOTATION_TABLE_EXPECTATIONS)
+
 def get_migrations() -> list[MigrationDefinition]:
 	return [
 		MigrationDefinition(
@@ -459,6 +484,12 @@ def get_migrations() -> list[MigrationDefinition]:
 			description="Create preprocessing_run table for tracking data preparation jobs",
 			is_satisfied=preprocessing_run_schema_is_satisfied,
 			apply=apply_preprocessing_run_schema,
+		),
+		MigrationDefinition(
+			name="0006_feature_annotation_schema",
+			description="Create feature_annotation table for per-protein matrisome/heart annotation",
+			is_satisfied=feature_annotation_schema_is_satisfied,
+			apply=apply_feature_annotation_schema,
 		),
 	]
 
