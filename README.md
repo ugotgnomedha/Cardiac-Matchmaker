@@ -85,13 +85,14 @@ Flow:
 
 2. **Create a run** (`POST /api/v1/projects/{project_id}/runs`) with a `target_application`, `target_tissue`, and `query`. The structure is taken from `constraints.structure` (one of `SL-Valves`, `AV-Valves`, `Ventricle`, `Atrium`, `coronaryArtery`, `largeAtery`) if given, otherwise inferred from the target text; if still unresolved, all structures are reported. Creating a run enqueues a `ProcessingJob`.
 
-3. The **worker** claims the job and runs the deterministic engine (`backend/app/services/analysis`):
+3. The **worker** claims the job and runs the engine (`backend/app/services/analysis`). The deterministic tools produce the numbers and citations; a LangGraph reasoning agent plans, verifies, and narrates on top:
    - **alignment** (`alignment.py`) — CCA (default) or Procrustes domain adaptation aligns the differently-scaled placental and cardiac proteomes, then scores prep↔structure matches as cosine in the shared space;
    - **literature RAG** (`rag.py` + `rag_store.py`) — project documents are chunked into `DocumentChunk` rows, embedded (MiniLM), and stored in **Qdrant**; drivers are grounded with dense/BM25/hybrid retrieval and page citations;
    - **UniProt** (`uniprot.py`) — fallback function lookup + ECM-vs-contaminant classification;
-   - **report** (`report.py`) — the deterministic, cited Decision Report.
+   - **report** (`report.py`) — the deterministic, cited Decision Report (ranking + grounded drivers + caveats);
+   - **agent** (`agent.py`) — a **LangGraph** Planner → Executor → Critic → Reporter loop (local **Ollama** model) that runs the tools, flags contradictions between the numerical match and the literature, and narrates the report.
 
-   Results are persisted as `AnalysisStep`s, ranked `CandidateMatch`es, `EvidenceItem`s (one per grounded driver), `ContradictionWarning`s (caveats), and a `Report` (`json_body` + `markdown_body`).
+   Results are persisted as `AnalysisStep`s (`load_proteomics`, `align`, `retrieve_and_ground`, `agent_reasoning`), ranked `CandidateMatch`es, `EvidenceItem`s (one per grounded driver), `ContradictionWarning`s (deterministic caveats + the agent's critic findings), and a `Report` (`json_body` includes the agent's plan/verdict; `markdown_body` is the narrated report).
 
 Read results back:
 
@@ -103,7 +104,17 @@ GET /api/v1/runs/{run_id}/evidence    # grounded driver evidence
 GET /api/v1/runs/{run_id}/report      # the Decision Report (markdown + JSON)
 ```
 
-**Design invariant:** the recommendation, rankings, and citations are produced entirely by the deterministic engine — there is no LLM in this path.
+**Design invariant:** the recommendation, rankings, and citations come entirely from the deterministic engine — the LLM only plans, critiques, and narrates, so it cannot change a number or a citation.
+
+### Reasoning agent (Ollama)
+
+The agent loop is the default run path and uses a local Ollama model, so no API key is needed. `compose.yml` runs an `ollama` service; pull a model into it once:
+
+```bash
+docker compose exec ollama ollama pull qwen2.5:7b
+```
+
+Configure via env (`.env`): `MATCHMAKER_LLM` (model, default `qwen2.5:7b`) and `OLLAMA_BASE_URL` (default `http://ollama:11434`). A run fails if the model is unavailable.
 
 To index a project document into Qdrant from a shell (the worker mounts the backend at `/app/backend`):
 
@@ -114,7 +125,7 @@ docker compose exec -e PYTHONPATH=/app/backend worker python -c \
    print(LiteratureIndexer().index_document(Document.get_by_id('<document_id>')))"
 ```
 
-The analysis dependencies (numpy/pandas/scipy/scikit-learn, qdrant-client/pypdf/rank-bm25) ship with the backend; the worker additionally installs sentence-transformers/torch. Qdrant runs as the `vector-db` service; override its address with `QDRANT_URL` (default `http://vector-db:6333`).
+The analysis dependencies (numpy/pandas/scipy/scikit-learn, qdrant-client/pypdf/rank-bm25, langchain-core/langgraph) ship with the backend; the worker additionally installs sentence-transformers/torch and langchain-ollama. Qdrant runs as the `vector-db` service (`QDRANT_URL`, default `http://vector-db:6333`); Ollama as the `ollama` service.
 
 ## Testing
 
