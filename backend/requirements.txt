@@ -29,6 +29,8 @@ PyJWT==2.12.1
 pyrefly==0.63.1
 pytest==9.0.3
 python-dotenv==1.2.2
+scikit-learn==1.6.1
+scipy==1.13.1
 SQLAlchemy==2.0.49
 starlette==1.0.0
 types-peewee==4.0.1.20260426
