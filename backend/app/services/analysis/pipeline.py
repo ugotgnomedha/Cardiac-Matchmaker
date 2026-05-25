@@ -56,13 +56,15 @@ class AnalysisService:
         loader: Optional[ProteomicsLoader] = None,
         uniprot=None,
         retriever_factory: Optional[Callable[[UUID], object]] = None,
+        chat_model=None,
         method: str = "cca",
         n_drivers: int = 5,
     ) -> None:
-        """Wire up the (injectable) loader, UniProt client, and retriever factory."""
+        """Wire up the (injectable) loader, UniProt client, retriever, and chat model."""
         self.loader = loader or ProteomicsLoader()
         self._uniprot = uniprot
         self.retriever_factory = retriever_factory or _default_retriever_factory
+        self._chat_model = chat_model
         self.method = method
         self.n_drivers = n_drivers
 
@@ -72,6 +74,15 @@ class AnalysisService:
         if self._uniprot is None:
             self._uniprot = _default_uniprot()
         return self._uniprot
+
+    @property
+    def chat_model(self):
+        """The Ollama chat model, constructed lazily on first use."""
+        if self._chat_model is None:
+            from app.services.analysis.llm import build_chat_model
+
+            self._chat_model = build_chat_model()
+        return self._chat_model
 
     def run(self, analysis_run) -> object:
         """Execute the full pipeline for a run and return its persisted Report."""
@@ -90,16 +101,31 @@ class AnalysisService:
             lambda: align.fit(data, method=self.method),
             lambda a: {"method": a.method, "n_anchor_proteins": len(a.proteins), "quality": list(a.quality)},
         )
+        report = self._step(
+            analysis_run, 3, "retrieve_and_ground",
+            {"structures": structures, "n_drivers": self.n_drivers},
+            lambda: self._ground_and_persist(analysis_run, version_id, alignment, structures),
+            lambda r: {"recommendations": {s.structure: s.recommendation for s in r.structures}},
+        )
         self._step(
-            analysis_run, 3, "build_report",
+            analysis_run, 4, "agent_reasoning",
             {"structures": structures},
-            lambda: self._build_and_persist(analysis_run, version_id, alignment, structures),
-            lambda r: {"structures": [s.structure for s in r.structures]},
+            lambda: self._reason_and_persist(analysis_run, alignment, report, getattr(analysis_run, "query")),
+            lambda res: {
+                "approved": res.approved,
+                "rounds": res.rounds,
+                "contradictions": res.contradictions,
+                "plan": res.plan,
+            },
         )
         return self._report_row
 
-    def _build_and_persist(self, analysis_run, version_id, alignment, structures):
-        """Build the Decision Report (with grounding) and persist all its rows."""
+    def _ground_and_persist(self, analysis_run, version_id, alignment, structures):
+        """Build the deterministic Decision Report and persist its candidates/evidence/caveats."""
+        from app.models.base.base_model import db
+        from app.models.evidence.evidence_model import ContradictionWarning, EvidenceItem
+        from app.models.run.run_model import CandidateMatch
+
         retriever = self.retriever_factory(getattr(analysis_run, "project_id"))
         report = report_builder.build_report(
             alignment,
@@ -108,15 +134,6 @@ class AnalysisService:
             uniprot=self.uniprot,
             n_drivers=self.n_drivers,
         )
-        self._persist(analysis_run, version_id, report)
-        return report
-
-    def _persist(self, analysis_run, version_id, report) -> None:
-        """Write candidate matches, evidence, warnings, and the report for a run."""
-        from app.models.base.base_model import db
-        from app.models.evidence.evidence_model import ContradictionWarning, EvidenceItem
-        from app.models.report.report_model import Report
-        from app.models.run.run_model import CandidateMatch
 
         with db.atomic():
             for decision in report.structures:
@@ -172,13 +189,55 @@ class AnalysisService:
                         metadata={"structure": decision.structure},
                     )
 
+        return report
+
+    def _reason_and_persist(self, analysis_run, alignment, report, query):
+        """Run the agent loop over the grounded report, persisting its warnings and report."""
+        from app.models.base.base_model import db
+        from app.models.evidence.evidence_model import ContradictionWarning
+        from app.models.report.report_model import Report
+        from app.services.analysis.agent import AgentContext, run_agent
+
+        context = AgentContext(llm=self.chat_model, alignment=alignment, decision_report=report)
+        result = run_agent(context, query or "")
+
+        with db.atomic():
+            for contradiction in result.contradictions:
+                ContradictionWarning.create(
+                    id=uuid4(),
+                    analysis_run=analysis_run,
+                    candidate_name=report.structures[0].recommendation if report.structures else None,
+                    warning_type="agent_contradiction",
+                    severity="warning",
+                    message=str(contradiction),
+                    metadata={"source": "agent_critic"},
+                )
+            if result.notes:
+                ContradictionWarning.create(
+                    id=uuid4(),
+                    analysis_run=analysis_run,
+                    warning_type="agent_caveat",
+                    severity="info",
+                    message=result.notes,
+                    metadata={"source": "agent_critic"},
+                )
+
+            json_body = report.to_json()
+            json_body["agent"] = {
+                "plan": result.plan,
+                "approved": result.approved,
+                "rounds": result.rounds,
+                "contradictions": result.contradictions,
+                "notes": result.notes,
+            }
             self._report_row = Report.create(
                 id=uuid4(),
                 analysis_run=analysis_run,
                 status="ready",
-                json_body=report.to_json(),
-                markdown_body=report.to_markdown(),
+                json_body=json_body,
+                markdown_body=result.report,
             )
+        return result
 
     def _resolve_dataset_version(self, analysis_run) -> UUID:
         """Pick the project's latest normalized dataset version (else its latest)."""

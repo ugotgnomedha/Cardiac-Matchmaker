@@ -5,6 +5,8 @@ import sys
 from uuid import uuid4
 
 import numpy as np
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+from langchain_core.messages import AIMessage
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -24,6 +26,19 @@ class _NoUniProt:
     def lookup(self, gene):
         """Always return None."""
         return None
+
+
+def _fake_llm():
+    """Canned planner / critic-JSON / reporter replies for the agent loop."""
+    return GenericFakeChatModel(
+        messages=iter(
+            [
+                AIMessage(content="1. align 2. drivers 3. functions 4. robustness"),
+                AIMessage(content='{"approved": true, "contradictions": ["driver may be contaminant"], "notes": "patterns not abundance"}'),
+                AIMessage(content="Chorion_native is the closest aligned match."),
+            ]
+        )
+    )
 
 
 def _seed_proteome(project, n_proteins: int = 24, seed: int = 0) -> DatasetVersion:
@@ -100,7 +115,12 @@ def test_pipeline_persists_steps_candidates_evidence_and_report(service_context)
         constraints={"structure": "SL-Valves"},
     )
 
-    service = AnalysisService(uniprot=_NoUniProt(), retriever_factory=lambda pid: None, n_drivers=4)
+    service = AnalysisService(
+        uniprot=_NoUniProt(),
+        retriever_factory=lambda pid: None,
+        chat_model=_fake_llm(),
+        n_drivers=4,
+    )
     report_row = service.run(run)
 
     steps = list(
@@ -108,7 +128,12 @@ def test_pipeline_persists_steps_candidates_evidence_and_report(service_context)
         .where(AnalysisStep.analysis_run == run)
         .order_by(AnalysisStep.sequence_number)
     )
-    assert [s.step_name for s in steps] == ["load_proteomics", "align", "build_report"]
+    assert [s.step_name for s in steps] == [
+        "load_proteomics",
+        "align",
+        "retrieve_and_ground",
+        "agent_reasoning",
+    ]
     assert all(s.status == "completed" for s in steps)
 
     candidates = list(CandidateMatch.select().where(CandidateMatch.analysis_run == run))
@@ -121,10 +146,13 @@ def test_pipeline_persists_steps_candidates_evidence_and_report(service_context)
     assert 1 <= len(evidence) <= 4
 
     warnings = list(ContradictionWarning.select().where(ContradictionWarning.analysis_run == run))
-    assert any(w.warning_type == "interpretation" for w in warnings)
+    assert any(w.warning_type == "interpretation" for w in warnings)  # deterministic caveat
+    assert any(w.warning_type == "agent_contradiction" for w in warnings)  # from the critic
 
     report = Report.get(Report.analysis_run == run)
     assert report.status == "ready"
     assert report.json_body["structures"][0]["structure"] == "SL-Valves"
+    assert report.json_body["agent"]["approved"] is True
     assert "Decision Report" in report.markdown_body
+    assert "## Agent reasoning" in report.markdown_body
     assert report_row.id == report.id
