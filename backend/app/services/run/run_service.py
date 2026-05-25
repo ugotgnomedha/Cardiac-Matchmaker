@@ -8,7 +8,7 @@ from app.models.base.base_model import db
 from app.models.evidence.evidence_model import EvidenceItem
 from app.models.job.job_model import ProcessingJob
 from app.models.report.report_model import Report
-from app.models.run.run_model import AnalysisRun, AnalysisStep
+from app.models.run.run_model import AnalysisRun, AnalysisStep, CandidateMatch
 from app.services.project.project_service import ProjectService
 
 
@@ -74,6 +74,20 @@ class EvidenceItemRead(BaseModel):
     document_chunk_id: UUID | None
     support_label: str
     score: float | None
+    metadata: dict[str, Any] | None
+    created_at: datetime.datetime
+
+
+class CandidateMatchRead(BaseModel):
+    id: UUID
+    analysis_run_id: UUID
+    dataset_version_id: UUID | None
+    rank: int
+    candidate_name: str
+    target_name: str
+    score: float | None
+    method: str
+    features_used: int | None
     metadata: dict[str, Any] | None
     created_at: datetime.datetime
 
@@ -148,6 +162,15 @@ class RunService:
         )
         return [self._to_evidence_read_model(evidence_item) for evidence_item in evidence_items]
 
+    def list_candidates(self, run_id: UUID) -> list[CandidateMatchRead]:
+        self.get_run_model(run_id)
+        candidates = (
+            CandidateMatch.select()
+            .where(CandidateMatch.analysis_run == run_id)
+            .order_by(CandidateMatch.target_name.asc(), CandidateMatch.rank.asc())
+        )
+        return [self._to_candidate_read_model(candidate) for candidate in candidates]
+
     def get_report(self, run_id: UUID) -> ReportRead:
         self.get_run_model(run_id)
         report = (
@@ -211,6 +234,21 @@ class RunService:
             score=getattr(evidence_item, "score"),
             metadata=getattr(evidence_item, "metadata"),
             created_at=getattr(evidence_item, "created_at"),
+        )
+
+    def _to_candidate_read_model(self, candidate: CandidateMatch) -> CandidateMatchRead:
+        return CandidateMatchRead(
+            id=getattr(candidate, "id"),
+            analysis_run_id=getattr(candidate, "analysis_run_id"),
+            dataset_version_id=getattr(candidate, "dataset_version_id"),
+            rank=getattr(candidate, "rank"),
+            candidate_name=getattr(candidate, "candidate_name"),
+            target_name=getattr(candidate, "target_name"),
+            score=getattr(candidate, "score"),
+            method=getattr(candidate, "method"),
+            features_used=getattr(candidate, "features_used"),
+            metadata=getattr(candidate, "metadata"),
+            created_at=getattr(candidate, "created_at"),
         )
 
     def _to_report_read_model(self, report: Report) -> ReportRead:
