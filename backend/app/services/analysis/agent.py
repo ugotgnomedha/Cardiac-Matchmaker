@@ -10,7 +10,7 @@ loop can be exercised with a fake model in tests.
 import json
 import re
 from dataclasses import dataclass, field
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from langgraph.graph import END, StateGraph
 
@@ -69,9 +69,9 @@ class State(TypedDict, total=False):
 class AgentContext:
     """Everything a run's graph needs: the model and the run's engine outputs."""
 
-    llm: object
-    alignment: object
-    decision_report: object
+    llm: Any
+    alignment: Any
+    decision_report: Any
 
 
 @dataclass
@@ -155,7 +155,7 @@ def build_graph(context: AgentContext):
             parts.append(f"\n## Critic — caveats\n{state['notes']}")
         return {"report": "\n".join(parts)}
 
-    g = StateGraph(State)
+    g = StateGraph(State)  # pyrefly: ignore
     g.add_node("planner", planner)
     g.add_node("executor", executor)
     g.add_node("critic", critic)

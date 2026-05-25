@@ -1,7 +1,7 @@
 """End-to-end analysis pipeline: resolve inputs, run the engine, and persist run results."""
 
 import datetime
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 from uuid import UUID, uuid4
 
 from app.services.analysis import alignment as align
@@ -84,7 +84,7 @@ class AnalysisService:
             self._chat_model = build_chat_model()
         return self._chat_model
 
-    def run(self, analysis_run) -> object:
+    def run(self, analysis_run) -> Any:
         """Execute the full pipeline for a run and return its persisted Report."""
         version_id = self._resolve_dataset_version(analysis_run)
         structures = self._resolve_structures(analysis_run)
@@ -264,7 +264,7 @@ class AnalysisService:
         constraints = getattr(analysis_run, "constraints", None) or {}
         explicit = constraints.get("structure")
         if explicit in C.HEART_REGIONS:
-            return [explicit]
+            return [str(explicit)]
         listed = constraints.get("structures")
         if isinstance(listed, list):
             valid = [s for s in listed if s in C.HEART_REGIONS]
@@ -293,13 +293,13 @@ class AnalysisService:
         try:
             result = work()
         except Exception as exc:
-            step.status = "failed"
-            step.error_message = str(exc)
-            step.finished_at = utc_now()
+            step.status = "failed"  # pyrefly: ignore
+            step.error_message = str(exc)  # pyrefly: ignore
+            step.finished_at = utc_now()  # pyrefly: ignore
             step.save()
             raise
-        step.status = "completed"
+        step.status = "completed"  # pyrefly: ignore
         step.output_snapshot = summarize(result)
-        step.finished_at = utc_now()
+        step.finished_at = utc_now()  # pyrefly: ignore
         step.save()
         return result
