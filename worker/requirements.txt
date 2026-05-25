@@ -1,1 +1,7 @@
-
+# Worker runtime: enough to talk to Postgres and drive the job loop.
+# The scientific/analysis dependencies are added when the worker starts
+# running the analysis pipeline (see a later commit).
+peewee==4.0.5
+psycopg==3.3.3
+psycopg-binary==3.3.3
+python-dotenv==1.2.2
