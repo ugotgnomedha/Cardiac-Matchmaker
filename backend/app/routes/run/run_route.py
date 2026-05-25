@@ -7,6 +7,7 @@ from app.services.project.project_service import ProjectNotFoundError
 from app.services.run.run_service import (
     AnalysisRunRead,
     AnalysisStepRead,
+    CandidateMatchRead,
     EvidenceItemRead,
     ReportNotFoundError,
     ReportRead,
@@ -65,6 +66,14 @@ def list_steps(run_id: UUID) -> list[AnalysisStepRead]:
 def list_evidence(run_id: UUID) -> list[EvidenceItemRead]:
     try:
         return run_service.list_evidence(run_id)
+    except RunServiceError as exc:
+        _raise_run_http_error(exc)
+
+
+@run_router.get("/runs/{run_id}/candidates", response_model=list[CandidateMatchRead])
+def list_candidates(run_id: UUID) -> list[CandidateMatchRead]:
+    try:
+        return run_service.list_candidates(run_id)
     except RunServiceError as exc:
         _raise_run_http_error(exc)
 

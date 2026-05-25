@@ -6,7 +6,7 @@ import pytest
 from app.models.evidence.evidence_model import EvidenceItem
 from app.models.job.job_model import ProcessingJob
 from app.models.report.report_model import Report
-from app.models.run.run_model import AnalysisRun, AnalysisStep
+from app.models.run.run_model import AnalysisRun, AnalysisStep, CandidateMatch
 from app.services.run.run_service import (
     ReportNotFoundError,
     RunCreatePayload,
@@ -106,6 +106,28 @@ def test_run_service_returns_ordered_steps_evidence_and_latest_report(service_co
     assert evidence_items[0].metadata == {"retrieval_query": "amnion extracellular matrix"}
     assert latest_report.status == "ready"
     assert latest_report.json_body == {"version": 2}
+
+
+def test_run_service_lists_candidates_ordered_by_structure_then_rank(service_context):
+    project = service_context.create_project_model()
+    service = RunService()
+    run = service.create_run(project.id, make_run_payload())
+    run_model = AnalysisRun.get_by_id(run.id)
+
+    CandidateMatch.create(
+        analysis_run=run_model, rank=2, candidate_name="Amnion_decell",
+        target_name="SL-Valves", score=0.972, method="cca", features_used=2790,
+    )
+    CandidateMatch.create(
+        analysis_run=run_model, rank=1, candidate_name="Chorion_native",
+        target_name="SL-Valves", score=0.992, method="cca", features_used=2790,
+    )
+
+    candidates = service.list_candidates(run.id)
+
+    assert [(c.target_name, c.rank) for c in candidates] == [("SL-Valves", 1), ("SL-Valves", 2)]
+    assert candidates[0].candidate_name == "Chorion_native"
+    assert candidates[0].method == "cca"
 
 
 def test_run_service_raises_for_missing_run_and_missing_report(service_context):
