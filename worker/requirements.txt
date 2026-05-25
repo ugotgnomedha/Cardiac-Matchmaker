@@ -1,7 +1,16 @@
-# Worker runtime: enough to talk to Postgres and drive the job loop.
-# The scientific/analysis dependencies are added when the worker starts
-# running the analysis pipeline (see a later commit).
+# Talk to Postgres and drive the job loop.
 peewee==4.0.5
 psycopg==3.3.3
 psycopg-binary==3.3.3
 python-dotenv==1.2.2
+
+# Analysis engine (shared with backend/app/services/analysis, mounted at runtime).
+numpy==2.0.2
+pandas==2.3.3
+scipy==1.13.1
+scikit-learn==1.6.1
+pypdf==5.9.0
+rank-bm25==0.2.2
+qdrant-client==1.12.1
+sentence-transformers==5.1.2
+torch==2.8.0

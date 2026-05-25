@@ -1,4 +1,4 @@
-"""Background worker that claims queued analysis_run jobs and advances them through a placeholder step.
+"""Background worker that claims queued analysis_run jobs and runs the analysis pipeline.
 
 Shares the backend's Peewee models via the mounted ``/app/backend`` (see ``compose.yml``),
 falling back to the sibling ``backend`` directory locally.
@@ -34,7 +34,7 @@ _add_backend_to_path()
 
 from app.models.base.base_model import db
 from app.models.job.job_model import ProcessingJob
-from app.models.run.run_model import AnalysisRun, AnalysisStep
+from app.models.run.run_model import AnalysisRun
 
 JOB_TYPE_ANALYSIS_RUN = "analysis_run"
 POLL_INTERVAL_SECONDS = float(os.getenv("WORKER_POLL_INTERVAL", "5"))
@@ -74,16 +74,10 @@ def _run_id_from_job(job: ProcessingJob) -> str | None:
 
 
 def handle_analysis_run(run: AnalysisRun) -> None:
-    """Advance the run through one bookkeeping step (placeholder for the pipeline)."""
-    AnalysisStep.create(
-        analysis_run=run,
-        sequence_number=0,
-        step_name="initialize",
-        status="completed",
-        started_at=utc_now(),
-        finished_at=utc_now(),
-        output_snapshot={"note": "analysis pipeline not yet wired"},
-    )
+    """Run the alignment/RAG/report pipeline, persisting steps/evidence/report."""
+    from app.services.analysis.pipeline import AnalysisService
+
+    AnalysisService().run(run)
 
 
 def process_job(job: ProcessingJob) -> None:
