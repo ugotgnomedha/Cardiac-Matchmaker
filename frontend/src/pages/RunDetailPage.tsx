@@ -1,12 +1,16 @@
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import { useState } from "react";
 import useSWR from "swr";
 
 import { AppLayout } from "../components/AppLayout";
 import type { AnalysisRun, AnalysisStep, EvidenceItem } from "../utils/runsApi";
+import { createRun } from "../utils/runsApi";
 import { formatDate, statusClassName } from "../utils/view";
 
 export function RunDetailPage() {
   const { runId } = useParams();
+  const navigate = useNavigate();
+  const [isRerunning, setIsRerunning] = useState(false);
   const { data: run, error: runError } = useSWR<AnalysisRun>(
     runId ? `/api/v1/runs/${runId}` : null,
     {
@@ -35,6 +39,22 @@ export function RunDetailPage() {
     return <Navigate to="/" replace />;
   }
 
+  async function handleRerun() {
+    if (!run) return;
+    setIsRerunning(true);
+    try {
+      const newRun = await createRun(run.project_id, {
+        target_application: run.target_application,
+        target_tissue: run.target_tissue,
+        query: run.query,
+        constraints: run.constraints ?? undefined,
+      });
+      navigate(`/runs/${newRun.id}`);
+    } catch {
+      setIsRerunning(false);
+    }
+  }
+
   return (
     <AppLayout
       actions={
@@ -53,6 +73,14 @@ export function RunDetailPage() {
             >
               Report
             </Link>
+            <button
+              className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-300 px-4 text-sm font-medium hover:bg-teal-50 hover:text-teal-700 disabled:opacity-50"
+              disabled={isRerunning}
+              onClick={handleRerun}
+              type="button"
+            >
+              {isRerunning ? "Creating..." : "Rerun"}
+            </button>
           </>
         ) : null
       }
@@ -73,7 +101,16 @@ export function RunDetailPage() {
           Run not found.
         </section>
       ) : (
-        <section className="grid gap-5 lg:grid-cols-[320px_1fr]">
+        <>
+          {run?.status === "failed" && run.error_message ? (
+            <section className="mb-5 rounded-lg border border-rose-200 bg-rose-50 p-5">
+              <h3 className="text-sm font-semibold text-rose-800">Error</h3>
+              <p className="mt-1 text-sm text-rose-700 whitespace-pre-wrap break-all">
+                {run.error_message}
+              </p>
+            </section>
+          ) : null}
+          <section className="grid gap-5 lg:grid-cols-[320px_1fr]">
           <section className="rounded-lg border border-zinc-200 bg-white p-5">
             <h2 className="text-lg font-semibold tracking-normal">
               Run Snapshot
@@ -155,6 +192,7 @@ export function RunDetailPage() {
             </section>
           </section>
         </section>
+      </>
       )}
     </AppLayout>
   );
