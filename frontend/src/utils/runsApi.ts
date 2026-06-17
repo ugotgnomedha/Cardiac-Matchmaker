@@ -8,6 +8,7 @@ export interface AnalysisRun {
   target_application: string;
   target_tissue: string;
   constraints: Record<string, unknown> | null;
+  selected_config: Record<string, unknown> | null;
   started_at: string | null;
   finished_at: string | null;
   error_message: string | null;
@@ -59,6 +60,7 @@ export interface RunCreatePayload {
   target_tissue: string;
   query: string;
   constraints?: Record<string, unknown> | null;
+  selected_config?: Record<string, unknown> | null;
 }
 
 export function createRun(projectId: string, payload: RunCreatePayload) {

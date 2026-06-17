@@ -16,7 +16,10 @@ export function ProjectsPage() {
   const { data, error, isLoading, mutate: mutateProjects } = useSWR<Project[]>(
     "/api/v1/projects",
   );
-  const { data: models } = useSWR<ModelConfig[]>("/api/v1/models");
+  const { data: models } = useSWR<ModelConfig[]>("/api/v1/models", {
+    refreshInterval: (latest) =>
+      latest?.some((m) => m.status === "pulling") ? 2000 : 0,
+  });
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -163,11 +166,18 @@ export function ProjectsPage() {
           <div className="divide-y divide-zinc-200">
             {(models ?? []).map((m) => (
               <div className="flex items-center justify-between gap-3 px-5 py-3" key={m.id}>
-                <div className="grid gap-0.5 min-w-0">
+                <div className="grid gap-0.5 min-w-0 flex-1">
                   <span className="font-medium truncate">{m.name}</span>
                   <span className="text-xs text-zinc-500">
                     {m.provider === "ollama" ? "Ollama" : "LiteLLM"} · {m.model_id}
                   </span>
+                  {m.status === "pulling" ? (
+                    <div className="mt-1 h-1.5 w-full rounded-full bg-zinc-200">
+                      <div className="h-1.5 animate-pulse rounded-full bg-teal-600/50 w-full" />
+                    </div>
+                  ) : m.status === "error" ? (
+                    <span className="text-xs text-rose-600">Pull failed</span>
+                  ) : null}
                 </div>
                 <button
                   className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-rose-50 hover:text-rose-600"

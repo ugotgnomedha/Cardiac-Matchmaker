@@ -48,6 +48,7 @@ export function RunDetailPage() {
         target_tissue: run.target_tissue,
         query: run.query,
         constraints: run.constraints ?? undefined,
+        selected_config: run.selected_config ?? undefined,
       });
       navigate(`/runs/${newRun.id}`);
     } catch {
@@ -120,6 +121,12 @@ export function RunDetailPage() {
                 <dt className="font-medium text-zinc-500">Target Tissue</dt>
                 <dd>{run?.target_tissue ?? "Loading..."}</dd>
               </div>
+              {run?.selected_config?.model ? (
+                <div>
+                  <dt className="font-medium text-zinc-500">Model</dt>
+                  <dd className="font-mono text-sm">{String(run.selected_config.model)}</dd>
+                </div>
+              ) : null}
               <div>
                 <dt className="font-medium text-zinc-500">Created</dt>
                 <dd>{formatDate(run?.created_at)}</dd>

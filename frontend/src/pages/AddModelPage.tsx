@@ -7,7 +7,6 @@ import { isApiError } from "../utils/api";
 import {
   addModel,
   listOllamaModels,
-  pullOllamaModel,
   testApiKey,
   type OllamaModel,
 } from "../utils/modelsApi";
@@ -26,8 +25,7 @@ export function AddModelPage() {
 
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [ollamaFetchError, setOllamaFetchError] = useState<string | null>(null);
-  const [selectedOllama, setSelectedOllama] = useState("");
-  const [customOllama, setCustomOllama] = useState("");
+  const [modelTag, setModelTag] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [pulling, setPulling] = useState(false);
 
@@ -72,13 +70,11 @@ export function AddModelPage() {
 
   async function handleOllamaSubmit(e: FormEvent) {
     e.preventDefault();
-    const modelName = selectedOllama === "__custom__" ? customOllama.trim() : selectedOllama;
-    if (!modelName || !displayName.trim()) return;
+    if (!modelTag || !displayName) return;
     setErrorMessage(null);
     setPulling(true);
     try {
-      await pullOllamaModel(modelName);
-      await addModel({ name: displayName.trim(), provider: "ollama", model_id: modelName });
+      await addModel({ name: displayName, provider: "ollama", model_id: modelTag });
       startTransition(() => navigate("/"));
     } catch (err) {
       setErrorMessage(isApiError(err) ? err.message : "Failed to add model");
@@ -89,11 +85,11 @@ export function AddModelPage() {
 
   async function handleLitellmSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!litellmName.trim() || !litellmModelId.trim() || !apiKey.trim()) return;
+    if (!litellmName || !litellmModelId || !apiKey) return;
     setErrorMessage(null);
     setIsSubmitting(true);
     try {
-      await addModel({ name: litellmName.trim(), provider: "litellm", model_id: litellmModelId.trim(), api_key: apiKey });
+      await addModel({ name: litellmName, provider: "litellm", model_id: litellmModelId, api_key: apiKey });
       startTransition(() => navigate("/"));
     } catch (err) {
       setErrorMessage(isApiError(err) ? err.message : "Failed to add model");
@@ -132,41 +128,52 @@ export function AddModelPage() {
             </p>
           ) : null}
           <label className="grid gap-1.5 text-sm font-medium text-zinc-700">
-            Ollama model
+            Model tag
             <select
               className="h-10 rounded-lg border border-zinc-300 px-3 text-zinc-950"
-              value={selectedOllama}
-              onChange={(e) => setSelectedOllama(e.target.value)}
+              value={modelTag}
+              onChange={(e) => {
+                setModelTag(e.target.value);
+                setDisplayName(e.target.value);
+              }}
+              required
             >
-              <option value="">Select downloaded model...</option>
+              <option value="">Select model...</option>
               {ollamaModels.map((m) => (
                 <option key={m.name} value={m.name}>
-                  {m.name} ({(m.size / 1e9).toFixed(1)} GB)
+                  {m.name} ({(m.size / 1e9).toFixed(1)} GB) — downloaded
                 </option>
               ))}
-              <option value="__custom__">Custom name...</option>
+              {ollamaModels.length > 0 ? <option disabled>── not downloaded ──</option> : null}
+              <option value="qwen2.5:7b">qwen2.5:7b</option>
+              <option value="qwen2.5:14b">qwen2.5:14b</option>
+              <option value="qwen2.5:32b">qwen2.5:32b</option>
+              <option value="llama3.2:3b">llama3.2:3b</option>
+              <option value="llama3.1:8b">llama3.1:8b</option>
+              <option value="mistral:7b">mistral:7b</option>
+              <option value="deepseek-r1:7b">deepseek-r1:7b</option>
+              <option value="deepseek-r1:14b">deepseek-r1:14b</option>
+              <option value="gemma3:4b">gemma3:4b</option>
+              <option value="gemma3:12b">gemma3:12b</option>
+              <option value="phi4:14b">phi4:14b</option>
+              <option value="codellama:7b">codellama:7b</option>
+              <option value="nomic-embed-text">nomic-embed-text</option>
             </select>
+            <span className="text-xs text-zinc-500">
+              Downloaded models shown first. Others will be pulled on submit.
+            </span>
           </label>
-          {selectedOllama === "__custom__" && (
-            <label className="grid gap-1.5 text-sm font-medium text-zinc-700">
-              Model tag
-              <input
-                className="h-10 rounded-lg border border-zinc-300 px-3 text-zinc-950"
-                placeholder="mistral:7b"
-                value={customOllama}
-                onChange={(e) => setCustomOllama(e.target.value)}
-              />
-            </label>
-          )}
           <label className="grid gap-1.5 text-sm font-medium text-zinc-700">
             Display name
-            <input
+            <select
               className="h-10 rounded-lg border border-zinc-300 px-3 text-zinc-950"
-              placeholder="Qwen 2.5 7B"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               required
-            />
+            >
+              <option value="">Select name...</option>
+              {modelTag ? <option value={modelTag}>{modelTag}</option> : null}
+            </select>
           </label>
           {errorMessage && (
             <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -179,7 +186,7 @@ export function AddModelPage() {
               isDisabled={pulling}
               type="submit"
             >
-              {pulling ? "Pulling..." : "Pull & Add"}
+              {pulling ? "Adding..." : "Pull & Add"}
             </Button>
             <Link
               className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-300 px-4 text-sm font-medium hover:bg-zinc-50"
