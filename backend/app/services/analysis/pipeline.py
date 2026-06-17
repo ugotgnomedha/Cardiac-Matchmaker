@@ -67,6 +67,7 @@ class AnalysisService:
         self._chat_model = chat_model
         self.method = method
         self.n_drivers = n_drivers
+        self._run_model_override = None
 
     @property
     def uniprot(self):
@@ -77,15 +78,17 @@ class AnalysisService:
 
     @property
     def chat_model(self):
-        """The Ollama chat model, constructed lazily on first use."""
+        """The chat model, constructed lazily with optional per-run override."""
         if self._chat_model is None:
             from app.services.analysis.llm import build_chat_model
 
-            self._chat_model = build_chat_model()
+            self._chat_model = build_chat_model(self._run_model_override)
         return self._chat_model
 
     def run(self, analysis_run) -> Any:
         """Execute the full pipeline for a run and return its persisted Report."""
+        config = getattr(analysis_run, "selected_config", None) or {}
+        self._run_model_override = config.get("model")
         version_id = self._resolve_dataset_version(analysis_run)
         structures = self._resolve_structures(analysis_run)
 
