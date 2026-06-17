@@ -6,7 +6,7 @@ from app.models.evidence.evidence_model import ContradictionWarning, EvidenceIte
 from app.models.feature.feature_model import FeatureAnnotation
 from app.models.job.job_model import ProcessingJob
 from app.models.report.report_model import Report
-from app.models.run.run_model import AnalysisRun, AnalysisStep, CandidateMatch
+from app.models.run.run_model import AnalysisRun, AnalysisStep, CandidateMatch, CardiacApplicationQuery
 from app.models.sample.sample_model import Sample, Measurement
 from app.models.preprocessing.preprocessing_run_model import PreprocessingRun
 
@@ -22,6 +22,7 @@ __all__ = [
     "FeatureAnnotation",
     "ProcessingJob",
     "Report",
+    "CardiacApplicationQuery",
     "AnalysisRun",
     "AnalysisStep",
     "CandidateMatch",

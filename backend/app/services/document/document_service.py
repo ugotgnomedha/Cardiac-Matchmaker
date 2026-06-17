@@ -1,11 +1,11 @@
 import datetime
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.base.base_model import db
 from app.models.document.document_model import Document
+from app.repositories.document_repository import DocumentRepository
 from app.services.project.project_service import ProjectService
 
 
@@ -40,31 +40,24 @@ class DocumentRead(BaseModel):
 class DocumentService:
     def __init__(self) -> None:
         self.project_service = ProjectService()
+        self.document_repository = DocumentRepository()
 
     def create_document(self, project_id: UUID, payload: DocumentCreatePayload) -> DocumentRead:
         project = self.project_service.get_project_model(project_id)
 
-        with db.atomic():
-            document = Document.create(
-                id=uuid4(),
-                project=project,
-                title=payload.title,
-                original_filename=payload.original_filename,
-                storage_path=payload.storage_path,
-                status=payload.status,
-                metadata=payload.metadata,
-            )
-
+        document = self.document_repository.create(
+            project=project,
+            title=payload.title,
+            original_filename=payload.original_filename,
+            storage_path=payload.storage_path,
+            status=payload.status,
+            metadata=payload.metadata,
+        )
         return self._to_read_model(document)
 
     def list_documents(self, project_id: UUID) -> list[DocumentRead]:
         self.project_service.get_project_model(project_id)
-        documents = (
-            Document.select()
-            .where(Document.project == project_id)
-            .order_by(Document.created_at.desc())
-        )
-        return [self._to_read_model(document) for document in documents]
+        return [self._to_read_model(document) for document in self.document_repository.list_for_project(project_id)]
 
     def _to_read_model(self, document: Document) -> DocumentRead:
         return DocumentRead(

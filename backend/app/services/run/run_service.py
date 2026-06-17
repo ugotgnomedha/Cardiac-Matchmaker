@@ -1,14 +1,15 @@
 import datetime
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.base.base_model import db
 from app.models.evidence.evidence_model import EvidenceItem
-from app.models.job.job_model import ProcessingJob
 from app.models.report.report_model import Report
 from app.models.run.run_model import AnalysisRun, AnalysisStep, CandidateMatch
+from app.repositories.evidence_repository import CandidateRepository, EvidenceRepository
+from app.repositories.report_repository import ReportRepository
+from app.repositories.run_repository import RunRepository
 from app.services.project.project_service import ProjectService
 
 
@@ -31,18 +32,23 @@ class RunCreatePayload(BaseModel):
 
     target_application: str = Field(min_length=1, max_length=255)
     target_tissue: str = Field(min_length=1, max_length=255)
+    function_target: str | None = Field(default=None, max_length=255)
     query: str = Field(min_length=1)
     constraints: dict[str, Any] | None = None
+    selected_config: dict[str, Any] | None = None
 
 
 class AnalysisRunRead(BaseModel):
     id: UUID
     project_id: UUID
+    application_query_id: UUID
     status: str
     query: str
     target_application: str
     target_tissue: str
+    function_target: str | None
     constraints: dict[str, Any] | None
+    selected_config: dict[str, Any] | None
     started_at: datetime.datetime | None
     finished_at: datetime.datetime | None
     error_message: str | None
@@ -106,86 +112,61 @@ class ReportRead(BaseModel):
 class RunService:
     def __init__(self) -> None:
         self.project_service = ProjectService()
+        self.run_repository = RunRepository()
+        self.evidence_repository = EvidenceRepository()
+        self.candidate_repository = CandidateRepository()
+        self.report_repository = ReportRepository()
 
     def create_run(self, project_id: UUID, payload: RunCreatePayload) -> AnalysisRunRead:
         project = self.project_service.get_project_model(project_id)
 
-        with db.atomic():
-            run = AnalysisRun.create(
-                id=uuid4(),
-                project=project,
-                status="queued",
-                query=payload.query,
-                target_application=payload.target_application,
-                target_tissue=payload.target_tissue,
-                constraints=payload.constraints,
-            )
-            ProcessingJob.create(
-                id=uuid4(),
-                job_type="analysis_run",
-                status="queued",
-                payload={
-                    "analysis_run_id": str(getattr(run, "id")),
-                    "project_id": str(project_id),
-                },
-            )
+        run = self.run_repository.create_with_query_and_job(
+            project=project,
+            query_text=payload.query,
+            target_application=payload.target_application,
+            target_tissue=payload.target_tissue,
+            function_target=payload.function_target,
+            constraints=payload.constraints,
+            selected_config=payload.selected_config,
+        )
 
         return self._to_run_read_model(run)
 
     def list_project_runs(self, project_id: UUID) -> list[AnalysisRunRead]:
         self.project_service.get_project_model(project_id)
-        runs = (
-            AnalysisRun.select()
-            .where(AnalysisRun.project == project_id)
-            .order_by(AnalysisRun.created_at.desc())
-        )
-        return [self._to_run_read_model(run) for run in runs]
+        return [self._to_run_read_model(run) for run in self.run_repository.list_for_project(project_id)]
 
     def get_run(self, run_id: UUID) -> AnalysisRunRead:
         return self._to_run_read_model(self.get_run_model(run_id))
 
     def list_steps(self, run_id: UUID) -> list[AnalysisStepRead]:
         self.get_run_model(run_id)
-        steps = (
-            AnalysisStep.select()
-            .where(AnalysisStep.analysis_run == run_id)
-            .order_by(AnalysisStep.sequence_number.asc(), AnalysisStep.created_at.asc())
-        )
-        return [self._to_step_read_model(step) for step in steps]
+        return [self._to_step_read_model(step) for step in self.run_repository.list_steps(run_id)]
 
     def list_evidence(self, run_id: UUID) -> list[EvidenceItemRead]:
         self.get_run_model(run_id)
-        evidence_items = (
-            EvidenceItem.select()
-            .where(EvidenceItem.analysis_run == run_id)
-            .order_by(EvidenceItem.created_at.asc())
-        )
-        return [self._to_evidence_read_model(evidence_item) for evidence_item in evidence_items]
+        return [
+            self._to_evidence_read_model(evidence_item)
+            for evidence_item in self.evidence_repository.list_for_run(run_id)
+        ]
 
     def list_candidates(self, run_id: UUID) -> list[CandidateMatchRead]:
         self.get_run_model(run_id)
-        candidates = (
-            CandidateMatch.select()
-            .where(CandidateMatch.analysis_run == run_id)
-            .order_by(CandidateMatch.target_name.asc(), CandidateMatch.rank.asc())
-        )
-        return [self._to_candidate_read_model(candidate) for candidate in candidates]
+        return [
+            self._to_candidate_read_model(candidate)
+            for candidate in self.candidate_repository.list_for_run(run_id)
+        ]
 
     def get_report(self, run_id: UUID) -> ReportRead:
         self.get_run_model(run_id)
-        report = (
-            Report.select()
-            .where(Report.analysis_run == run_id)
-            .order_by(Report.created_at.desc())
-            .first()
-        )
+        report = self.report_repository.get_latest_for_run(run_id)
         if report is None:
             raise ReportNotFoundError(f"report for run {run_id} not found")
 
         return self._to_report_read_model(report)
 
     def get_run_model(self, run_id: UUID) -> AnalysisRun:
-        run = AnalysisRun.get_or_none(AnalysisRun.id == run_id)
+        run = self.run_repository.get(run_id)
         if run is None:
             raise RunNotFoundError(f"run {run_id} not found")
         return run
@@ -194,11 +175,14 @@ class RunService:
         return AnalysisRunRead(
             id=getattr(run, "id"),
             project_id=getattr(run, "project_id"),
+            application_query_id=getattr(run, "application_query_id"),
             status=getattr(run, "status"),
             query=getattr(run, "query"),
             target_application=getattr(run, "target_application"),
             target_tissue=getattr(run, "target_tissue"),
+            function_target=getattr(run, "function_target"),
             constraints=getattr(run, "constraints"),
+            selected_config=getattr(run, "selected_config"),
             started_at=getattr(run, "started_at"),
             finished_at=getattr(run, "finished_at"),
             error_message=getattr(run, "error_message"),
