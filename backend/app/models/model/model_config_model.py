@@ -22,8 +22,8 @@ class ModelConfig(BaseModel):
     updated_at = DateTimeField(default=utc_now)
 
     def save(self, *args, **kwargs):
-        self.updated_at = utc_now()
+        self.updated_at = utc_now()  # pyrefly: ignore
         return super().save(*args, **kwargs)
 
-    class Meta:
+    class Meta:  # pyrefly: ignore
         table_name = "model_config"

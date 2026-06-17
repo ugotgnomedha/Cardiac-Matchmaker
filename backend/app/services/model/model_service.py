@@ -106,32 +106,33 @@ class ModelService:
 
     def _delete_ollama_model(self, model_name: str):
         try:
-            r = httpx.delete(f"{OLLAMA_URL}/api/delete", json={"name": model_name}, timeout=60)
+            r = httpx.request("DELETE", f"{OLLAMA_URL}/api/delete", json={"name": model_name}, timeout=60)
             r.raise_for_status()
         except Exception as e:
             raise ModelServiceError(f"Ollama delete failed: {e}")
 
     def test_litellm_key(self, provider: str, model_id: str, api_key: str) -> dict:
         try:
-            from litellm import completion
-            response = completion(
+            from litellm import completion  # pyrefly: ignore
+
+            response = completion(  # pyrefly: ignore
                 model=model_id,
-                messages=[{"role": "user", "content": "hi"}],
+                messages=[{"role": "user", "content": "hi"}],  # pyrefly: ignore
                 api_key=api_key,
                 max_tokens=5,
             )
-            return {"ok": True, "model": response.model}
+            return {"ok": True, "model": response.model}  # pyrefly: ignore
         except Exception as e:
             raise ModelServiceError(f"Key validation failed: {e}")
 
     def _to_read(self, m: ModelConfig) -> ModelRead:
         return ModelRead(
-            id=m.id,
-            name=m.name,
-            provider=m.provider,
-            model_id=m.model_id,
-            is_active=m.is_active,
-            status=m.status,
-            metadata_=m.metadata_,
-            created_at=m.created_at,
+            id=getattr(m, "id"),
+            name=getattr(m, "name"),
+            provider=getattr(m, "provider"),
+            model_id=getattr(m, "model_id"),
+            is_active=getattr(m, "is_active"),
+            status=getattr(m, "status"),
+            metadata_=getattr(m, "metadata_"),
+            created_at=getattr(m, "created_at"),
         )
