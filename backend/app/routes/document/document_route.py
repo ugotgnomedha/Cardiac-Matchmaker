@@ -38,3 +38,40 @@ def list_documents(project_id: UUID) -> list[DocumentRead]:
         return document_service.list_documents(project_id)
     except (DocumentServiceError, ProjectNotFoundError) as exc:
         _raise_document_http_error(exc)
+
+
+@document_router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(project_id: UUID, document_id: UUID) -> None:
+    try:
+        document_service.delete_document(project_id, document_id)
+    except (DocumentServiceError, ProjectNotFoundError) as exc:
+        _raise_document_http_error(exc)
+
+
+@document_router.post("/{document_id}/index")
+def index_document(project_id: UUID, document_id: UUID):
+    try:
+        document_service.project_service.get_project_model(project_id)
+    except ProjectNotFoundError as exc:
+        _raise_document_http_error(exc)
+
+    from uuid import uuid4
+    from app.models.base.base_model import db
+    from app.models.document.document_model import Document
+    from app.models.job.job_model import ProcessingJob
+
+    document = Document.get_or_none(Document.id == document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"document {document_id} not found")
+
+    with db.atomic():
+        document.status = "indexing"
+        document.save()
+        ProcessingJob.create(
+            id=uuid4(),
+            job_type="index_document",
+            status="queued",
+            payload={"document_id": str(document_id)},
+        )
+
+    return {"status": "queued"}

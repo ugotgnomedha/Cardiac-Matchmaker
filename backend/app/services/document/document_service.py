@@ -55,6 +55,18 @@ class DocumentService:
         )
         return self._to_read_model(document)
 
+    def delete_document(self, project_id: UUID, document_id: UUID) -> None:
+        self.project_service.get_project_model(project_id)
+        document = self.document_repository.get(document_id)
+        if document is None:
+            raise DocumentServiceError(f"document {document_id} not found")
+        try:
+            from app.services.analysis.rag_store import QdrantVectorStore
+            QdrantVectorStore().delete_by_document(str(document_id))
+        except Exception:
+            pass
+        self.document_repository.delete(document)
+
     def list_documents(self, project_id: UUID) -> list[DocumentRead]:
         self.project_service.get_project_model(project_id)
         return [self._to_read_model(document) for document in self.document_repository.list_for_project(project_id)]

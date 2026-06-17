@@ -1,4 +1,5 @@
 import datetime
+import os
 from typing import Any
 from uuid import UUID
 
@@ -25,6 +26,16 @@ class DatasetCreatePayload(BaseModel):
     metadata: dict[str, Any] | None = None
 
 
+class DatasetUpdatePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    type: str | None = Field(default=None, min_length=1, max_length=50)
+    original_filename: str | None = Field(default=None, min_length=1, max_length=255)
+    storage_path: str | None = Field(default=None, min_length=1)
+    metadata: dict[str, Any] | None = None
+
+
 class DatasetRead(BaseModel):
     id: UUID
     project_id: UUID
@@ -45,6 +56,9 @@ class DatasetService:
     def create_dataset(self, project_id: UUID, payload: DatasetCreatePayload) -> DatasetRead:
         project = self.project_service.get_project_model(project_id)
 
+        if not os.path.isfile(payload.storage_path):
+            raise DatasetServiceError(f"file not found: {payload.storage_path}")
+
         dataset = self.dataset_repository.create(
             project=project,
             name=payload.name,
@@ -55,9 +69,29 @@ class DatasetService:
         )
         return self._to_read_model(dataset)
 
+    def delete_dataset(self, project_id: UUID, dataset_id: UUID) -> None:
+        self.project_service.get_project_model(project_id)
+        dataset = self.dataset_repository.get(dataset_id)
+        if dataset is None:
+            raise DatasetServiceError(f"dataset {dataset_id} not found")
+        self.dataset_repository.delete(dataset)
+
     def list_datasets(self, project_id: UUID) -> list[DatasetRead]:
         self.project_service.get_project_model(project_id)
         return [self._to_read_model(dataset) for dataset in self.dataset_repository.list_for_project(project_id)]
+
+    def update_dataset(self, project_id: UUID, dataset_id: UUID, payload: DatasetUpdatePayload) -> DatasetRead:
+        self.project_service.get_project_model(project_id)
+        dataset = self.dataset_repository.get(dataset_id)
+        if dataset is None:
+            raise DatasetServiceError(f"dataset {dataset_id} not found")
+        values = payload.model_dump(exclude_none=True)
+        if not values:
+            raise DatasetServiceError("no fields to update")
+        if "storage_path" in values and not os.path.isfile(values["storage_path"]):
+            raise DatasetServiceError(f"file not found: {values['storage_path']}")
+        updated = self.dataset_repository.update(dataset, values)
+        return self._to_read_model(updated)
 
     def _to_read_model(self, dataset: Dataset) -> DatasetRead:
         return DatasetRead(

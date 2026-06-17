@@ -8,6 +8,7 @@ from app.services.dataset.dataset_service import (
     DatasetRead,
     DatasetService,
     DatasetServiceError,
+    DatasetUpdatePayload,
 )
 from app.services.project.project_service import ProjectNotFoundError
 
@@ -20,7 +21,9 @@ def _raise_dataset_http_error(exc: Exception) -> NoReturn:
     if isinstance(exc, ProjectNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.detail) from exc
     if isinstance(exc, DatasetServiceError):
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=exc.detail) from exc
+        detail = str(exc.detail)
+        status_code = status.HTTP_422_UNPROCESSABLE_ENTITY if detail.startswith("file not found") else status.HTTP_500_INTERNAL_SERVER_ERROR
+        raise HTTPException(status_code=status_code, detail=detail) from exc
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="unexpected dataset service error") from exc
 
 
@@ -36,5 +39,21 @@ def create_dataset(project_id: UUID, payload: DatasetCreatePayload) -> DatasetRe
 def list_datasets(project_id: UUID) -> list[DatasetRead]:
     try:
         return dataset_service.list_datasets(project_id)
+    except (DatasetServiceError, ProjectNotFoundError) as exc:
+        _raise_dataset_http_error(exc)
+
+
+@dataset_router.delete("/{dataset_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_dataset(project_id: UUID, dataset_id: UUID) -> None:
+    try:
+        dataset_service.delete_dataset(project_id, dataset_id)
+    except (DatasetServiceError, ProjectNotFoundError) as exc:
+        _raise_dataset_http_error(exc)
+
+
+@dataset_router.put("/{dataset_id}", response_model=DatasetRead)
+def update_dataset(project_id: UUID, dataset_id: UUID, payload: DatasetUpdatePayload) -> DatasetRead:
+    try:
+        return dataset_service.update_dataset(project_id, dataset_id, payload)
     except (DatasetServiceError, ProjectNotFoundError) as exc:
         _raise_dataset_http_error(exc)
