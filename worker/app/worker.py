@@ -1,4 +1,4 @@
-"""Background worker that claims queued analysis_run jobs and runs the analysis pipeline.
+"""Background worker that claims queued jobs and executes them.
 
 Shares the backend's Peewee models via the mounted ``/app/backend`` (see ``compose.yml``),
 falling back to the sibling ``backend`` directory locally.
@@ -36,7 +36,6 @@ from app.models.base.base_model import db
 from app.models.job.job_model import ProcessingJob
 from app.models.run.run_model import AnalysisRun
 
-JOB_TYPE_ANALYSIS_RUN = "analysis_run"
 POLL_INTERVAL_SECONDS = float(os.getenv("WORKER_POLL_INTERVAL", "5"))
 
 
@@ -46,14 +45,11 @@ def utc_now() -> datetime.datetime:
 
 
 def claim_next_job() -> ProcessingJob | None:
-    """Atomically claim the oldest queued analysis job (FOR UPDATE SKIP LOCKED)."""
+    """Atomically claim the oldest queued job of any type (FOR UPDATE SKIP LOCKED)."""
     with db.atomic():
         job = (
             ProcessingJob.select()
-            .where(
-                ProcessingJob.status == "queued",
-                ProcessingJob.job_type == JOB_TYPE_ANALYSIS_RUN,
-            )
+            .where(ProcessingJob.status == "queued")
             .order_by(ProcessingJob.created_at.asc())
             .for_update("FOR UPDATE SKIP LOCKED")
             .first()
@@ -73,6 +69,12 @@ def _run_id_from_job(job: ProcessingJob) -> str | None:
     return payload.get("analysis_run_id")
 
 
+def _document_id_from_job(job: ProcessingJob) -> str | None:
+    """Extract the document_id from a job's payload."""
+    payload = job.payload or {}
+    return payload.get("document_id")
+
+
 def handle_analysis_run(run: AnalysisRun) -> None:
     """Run the alignment/RAG/report pipeline, persisting steps/evidence/report."""
     from app.services.analysis.pipeline import AnalysisService
@@ -80,8 +82,33 @@ def handle_analysis_run(run: AnalysisRun) -> None:
     AnalysisService().run(run)
 
 
+def handle_index_document(document_id: str) -> None:
+    """Index a document's PDF into Qdrant."""
+    from app.models.document.document_model import Document
+    from app.services.analysis.rag_store import LiteratureIndexer
+
+    document = Document.get_or_none(Document.id == document_id)
+    if document is None:
+        raise ValueError(f"document {document_id} not found")
+
+    LiteratureIndexer().index_document(document)
+
+
 def process_job(job: ProcessingJob) -> None:
-    """Execute a claimed job and reconcile both the job and its run."""
+    """Execute a claimed job, dispatching by type."""
+    if job.job_type == "analysis_run":
+        _process_analysis_run_job(job)
+    elif job.job_type == "index_document":
+        _process_index_document_job(job)
+    else:
+        job.status = "failed"
+        job.last_error = f"unknown job_type {job.job_type!r}"
+        job.finished_at = utc_now()
+        job.save()
+
+
+def _process_analysis_run_job(job: ProcessingJob) -> None:
+    """Execute an analysis_run job."""
     run_id = _run_id_from_job(job)
     run = AnalysisRun.get_or_none(AnalysisRun.id == run_id) if run_id else None
     if run is None:
@@ -117,15 +144,53 @@ def process_job(job: ProcessingJob) -> None:
     job.save()
 
 
+def _process_index_document_job(job: ProcessingJob) -> None:
+    """Execute an index_document job."""
+    document_id = _document_id_from_job(job)
+    if not document_id:
+        job.status = "failed"
+        job.last_error = "document_id missing from payload"
+        job.finished_at = utc_now()
+        job.save()
+        return
+
+    from app.models.document.document_model import Document
+    document = Document.get_or_none(Document.id == document_id)
+    if document is None:
+        job.status = "failed"
+        job.last_error = f"document {document_id} not found"
+        job.finished_at = utc_now()
+        job.save()
+        return
+
+    document.status = "indexing"
+    document.save()
+
+    try:
+        handle_index_document(document_id)
+    except Exception as exc:
+        document.status = "failed"
+        document.save()
+        job.status = "failed"
+        job.last_error = "".join(traceback.format_exception_only(type(exc), exc)).strip()
+        job.finished_at = utc_now()
+        job.save()
+        return
+
+    job.status = "completed"
+    job.finished_at = utc_now()
+    job.save()
+
+
 def run_forever(poll_interval: float = POLL_INTERVAL_SECONDS) -> None:
-    """Poll for queued analysis jobs forever, processing them as they appear."""
-    print(f"Worker started; polling for '{JOB_TYPE_ANALYSIS_RUN}' jobs every {poll_interval}s.")
+    """Poll for queued jobs forever, processing them as they appear."""
+    print("Worker started; polling for queued jobs.")
     while True:
         try:
             with db.connection_context():
                 job = claim_next_job()
                 if job is not None:
-                    print(f"Processing job {job.id} (run {_run_id_from_job(job)}).")
+                    print(f"Processing job {job.id} (type={job.job_type}).")
                     process_job(job)
                     continue
         except Exception:

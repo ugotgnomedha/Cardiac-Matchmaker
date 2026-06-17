@@ -81,6 +81,18 @@ class QdrantVectorStore:
         return out
 
 
+    def delete_by_document(self, document_id: str) -> None:
+        """Delete all vectors for a document from Qdrant."""
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+        self.client.delete(
+            collection_name=self.collection,
+            points_selector=Filter(
+                must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+            ),
+        )
+
+
 class LiteratureIndexer:
     """Chunk a document's PDF into DocumentChunk rows and Qdrant vectors."""
 

@@ -1,137 +1,277 @@
 # Cardiac Matchmaker
 
-## Start
+Agentic Research System for matching placental materials to cardiac surgical applications. Aligns proteomics data across different measurement scales, retrieves supporting literature via RAG, and produces explainable Decision Reports through a LangGraph reasoning agent.
+
+## Quick Start
 
 ```bash
 cp .env.example .env
 make up
 ```
 
-## Stop
+Wait for all 6 services to become healthy: `backend`, `worker`, `db`, `vector-db`, `ollama`, `frontend`.
 
-```bash
-make down
+## Architecture
+
+```
+┌──────────┐    ┌────────┐    ┌──────────┐
+│ Frontend │───▶│Backend │───▶│PostgreSQL│
+│ :3000    │    │ :8000  │    │ :5432    │
+└──────────┘    └────────┘    └──────────┘
+                     │
+              ┌──────┼──────┐
+              ▼      ▼      ▼
+         ┌──────┐ ┌────┐ ┌──────┐
+         │Worker│ │RAG │ │Ollama│
+         │      │ │Qdr.│ │:11434│
+         └──────┘ └────┘ └──────┘
 ```
 
-## Backend
+- **Backend**: FastAPI + Peewee ORM + JWT cookie auth
+- **Worker**: Background job processor (analysis runs, document indexing)
+- **RAG**: Qdrant vector database for literature retrieval
+- **Ollama**: Local LLM for the reasoning agent
+- **Frontend**: React + TypeScript + HeroUI + SWR
 
-FastAPI + Peewee + cookie JWT auth. `POST /api/v1/auth/login` sets `access_token`. All `/api/v1/*` routes except `/api/v1/health`, `/api/v1/auth/login`, and `/api/v1/auth/logout` need that cookie.
+## First Launch
 
-Create a backend user from inside the running backend container:
-
-```bash
-docker compose exec backend python -m app.cmd.create_user user@example.com
-```
-
-If you do not pass `--password`, the command prompts for it securely.
-
-Common examples:
+### 1. Create a user
 
 ```bash
-docker compose exec backend python -m app.cmd.create_user admin@example.com --superuser
 docker compose exec backend python -m app.cmd.create_user doctor@example.com --password 'change-me'
-docker compose exec backend python -m app.cmd.create_user reviewer@example.com --inactive
-docker compose exec backend python -m app.cmd.create_user admin@example.com --superuser --json
 ```
 
-Available flags:
+Open `http://localhost:3000` and log in.
 
-- `--password`: provide the password inline instead of using the secure prompt
-- `--superuser`: create the user with superuser access
-- `--inactive`: create the user as inactive
-- `--json`: print the created user as JSON
+### 2. Pull the LLM model
 
-Database migrations run automatically when the backend container starts. You can also run them manually:
+On the main page, click **Pull** in the **Available Models** section, select a model tag (e.g., `qwen2.5:7b`), and click **Pull**. The model downloads in the background and appears in the table with a progress bar.
 
-```bash
-docker compose exec backend python -m app.cmd.migrate check
-docker compose exec backend python -m app.cmd.migrate apply
-```
-
-## Demo data
-
-Create the development storage layout and seed a demo research project:
-
-```bash
-docker compose exec backend python -m app.cmd.seed_demo
-```
-
-The seed command creates `data/raw`, `data/processed`, `data/pdfs`, `data/logs`, and `data/reports`.
-
-## .env
-
-```env
-POSTGRES_USER=
-POSTGRES_PASSWORD=
-POSTGRES_DB=
-POSTGRES_HOST=
-POSTGRES_PORT=
-JWT_SECRET_KEY=
-JWT_ALGORITHM=
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES=
-```
-
-## Analysis pipeline
-
-Cardiac Matchmaker recommends which placental tissue (Amnion, Basal tissue, Chorion, Umbilical Cord — native or decellularized) best matches a target heart structure, and grounds every driver protein in the literature or UniProt.
-
-Flow:
-
-1. **Ingest** the placenta+heart proteomics TSV into a dataset version. The parser fills `Sample`/`Measurement` and a `FeatureAnnotation` row per protein (matrisome class, UniProt accession, `match_in_heart`).
-
-   ```bash
-   docker compose exec backend python -m app.cmd.ingest_dataset <dataset_version_id> /data/raw/placenta_annotated_forAnalysis.txt
-   ```
-
-2. **Create a run** (`POST /api/v1/projects/{project_id}/runs`) with a `target_application`, `target_tissue`, and `query`. The structure is taken from `constraints.structure` (one of `SL-Valves`, `AV-Valves`, `Ventricle`, `Atrium`, `coronaryArtery`, `largeAtery`) if given, otherwise inferred from the target text; if still unresolved, all structures are reported. Creating a run enqueues a `ProcessingJob`.
-
-3. The **worker** claims the job and runs the engine (`backend/app/services/analysis`). The deterministic tools produce the numbers and citations; a LangGraph reasoning agent plans, verifies, and narrates on top:
-   - **alignment** (`alignment.py`) — CCA (default) or Procrustes domain adaptation aligns the differently-scaled placental and cardiac proteomes, then scores prep↔structure matches as cosine in the shared space;
-   - **literature RAG** (`rag.py` + `rag_store.py`) — project documents are chunked into `DocumentChunk` rows, embedded (MiniLM), and stored in **Qdrant**; drivers are grounded with dense/BM25/hybrid retrieval and page citations;
-   - **UniProt** (`uniprot.py`) — fallback function lookup + ECM-vs-contaminant classification;
-   - **report** (`report.py`) — the deterministic, cited Decision Report (ranking + grounded drivers + caveats);
-   - **agent** (`agent.py`) — a **LangGraph** Planner → Executor → Critic → Reporter loop (local **Ollama** model) that runs the tools, flags contradictions between the numerical match and the literature, and narrates the report.
-
-   Results are persisted as `AnalysisStep`s (`load_proteomics`, `align`, `retrieve_and_ground`, `agent_reasoning`), ranked `CandidateMatch`es, `EvidenceItem`s (one per grounded driver), `ContradictionWarning`s (deterministic caveats + the agent's critic findings), and a `Report` (`json_body` includes the agent's plan/verdict; `markdown_body` is the narrated report).
-
-Read results back:
-
-```text
-GET /api/v1/runs/{run_id}             # status
-GET /api/v1/runs/{run_id}/steps       # per-stage progress
-GET /api/v1/runs/{run_id}/candidates  # ranked prep matches per structure
-GET /api/v1/runs/{run_id}/evidence    # grounded driver evidence
-GET /api/v1/runs/{run_id}/report      # the Decision Report (markdown + JSON)
-```
-
-**Design invariant:** the recommendation, rankings, and citations come entirely from the deterministic engine — the LLM only plans, critiques, and narrates, so it cannot change a number or a citation.
-
-### Reasoning agent (Ollama)
-
-The agent loop is the default run path and uses a local Ollama model, so no API key is needed. `compose.yml` runs an `ollama` service; pull a model into it once:
-
+You can also pull via CLI:
 ```bash
 docker compose exec ollama ollama pull qwen2.5:7b
 ```
 
-Configure via env (`.env`): `MATCHMAKER_LLM` (model, default `qwen2.5:7b`) and `OLLAMA_BASE_URL` (default `http://ollama:11434`). A run fails if the model is unavailable.
-
-To index a project document into Qdrant from a shell (the worker mounts the backend at `/app/backend`):
+### 3. Set up data directory
 
 ```bash
-docker compose exec -e PYTHONPATH=/app/backend worker python -c \
-  "from app.services.analysis.rag_store import LiteratureIndexer; \
-   from app.models.document.document_model import Document; \
-   print(LiteratureIndexer().index_document(Document.get_by_id('<document_id>')))"
+mkdir -p data/pdfs
+cp datasets/placenta_annotated_forAnalysis.txt data/placenta.tsv
+# Place the Heart Map paper (Doll et al.) as data/pdfs/heart-map.pdf
 ```
 
-The analysis dependencies (numpy/pandas/scipy/scikit-learn, qdrant-client/pypdf/rank-bm25, langchain-core/langgraph) ship with the backend; the worker additionally installs sentence-transformers/torch and langchain-ollama. Qdrant runs as the `vector-db` service (`QDRANT_URL`, default `http://vector-db:6333`); Ollama as the `ollama` service.
+## Workflow
+
+### Create a Project
+
+On the main page `/`, fill in the project name and description, click **Create Project**.
+
+### Register a Dataset
+
+Inside a project, click **Register Dataset**:
+
+| Field | Value |
+|-------|-------|
+| Dataset name | `Placenta proteomics` |
+| Dataset type | `placenta` |
+| Original filename | `placenta.tsv` |
+| Storage path | `/data/placenta.tsv` |
+
+The backend validates that the file exists before accepting the registration.
+
+Click the **edit** (✏️) icon to modify dataset metadata later, or **delete** (🗑) to remove it.
+
+### Ingest the Dataset
+
+After registration, run the ingestion command to parse the TSV into the database:
+
+```bash
+docker compose exec backend python -c "
+from uuid import uuid4
+from app.models.base.base_model import db
+from app.models.dataset.dataset_model import Dataset, DatasetVersion
+import datetime
+
+db.connect(reuse_if_open=True)
+now = datetime.datetime.now(datetime.timezone.utc)
+placenta = Dataset.get(Dataset.name == 'Placenta proteomics')
+v = DatasetVersion.create(id=uuid4(), dataset=placenta, version_number='v1', status='raw', storage_path='/data/placenta.tsv', created_at=now)
+print(f'Version ID: {v.id}')
+db.close()
+"
+```
+
+```bash
+docker compose exec backend python -m app.cmd.ingest_dataset <VERSION_ID> /data/placenta.tsv
+```
+
+### Register a Document
+
+Inside a project, click **Register Document**:
+
+| Field | Value |
+|-------|-------|
+| Document title | `Heart Map — Doll et al.` |
+| Original filename | `heart-map.pdf` |
+| Storage path | `/data/pdfs/heart-map.pdf` |
+
+### Index the Document
+
+Click the **reload** (🔄) icon next to the document. This enqueues a background job that:
+1. Extracts text from the PDF
+2. Chunks it into ~500-token segments
+3. Embeds with MiniLM and stores in Qdrant
+4. Updates status to `indexed`
+
+The main page shows real-time status between runs.
+
+### Create a Run
+
+Inside a project, click **New Run**:
+
+| Field | Value |
+|-------|-------|
+| Target application | `myocardial patch` |
+| Target tissue | `left ventricle` |
+| Research query | `Find the best placental material for myocardial patch support.` |
+| Constraints JSON | `{"structure": "Ventricle"}` |
+| Model | Select from dropdown |
+
+The Model dropdown shows all registered models. If only one is configured, it's auto-selected as readonly. If none, a warning guides you to add one first.
+
+Click **Create Run**. The worker picks up the job and runs the pipeline:
+
+1. **load_proteomics** — parses measurements from the ingested dataset
+2. **align** — CCA (default) or Procrustes domain adaptation
+3. **retrieve_and_ground** — builds the Decision Report with ranked candidates, driver proteins, and literature citations
+4. **agent_reasoning** — LangGraph Planner→Executor→Critic→Reporter loop with the selected LLM
+
+### View Results
+
+The Run Detail page shows:
+
+- **Status** badge (queued → running → completed / failed)
+- **Error banner** (red, with full error message if failed)
+- **Model** used for this run
+- **Trace Steps** — each pipeline stage with timing and status
+- **Evidence** — grounded driver proteins with citations
+- **Rerun** button — creates a new run with the same parameters and model
+
+Click **Report** to view the Decision Report with recommendations, drivers, and literature-backed justifications.
+
+### Rerun
+
+The **Rerun** button on any run creates a new run preserving:
+- Target application, tissue, query, constraints
+- The same LLM model (`selected_config`)
+- Redirects to the new run
+
+## Model Management
+
+The main page (`/`) shows an **Available Models** table below the project list.
+
+### Quick Pull
+
+Click **Pull** next to the table header. An inline form opens with a model tag select:
+- Downloaded models shown first (marked as `downloaded`)
+- Popular models follow for auto-pull
+- Select a tag, click **Pull** — the model downloads in background and appears in the table with a progress bar
+
+### Add a model (advanced)
+
+Click **Add Model** for full configuration. Two tabs:
+
+**Local (Ollama):**
+1. Model tag dropdown: downloaded models shown first (with size), then popular models for auto-pull
+2. Display name: auto-fills from model tag
+3. **Pull & Add**: downloads the model from Ollama registry, saves to DB, redirects to main page
+4. The model shows as `pulling` with an animated progress bar until ready
+
+**API (LiteLLM):**
+1. Provider: OpenAI / Anthropic / DeepSeek / Groq / Mistral
+2. Model ID: auto-prefilled (e.g., `openai/gpt-4o`)
+3. API Key: with show/hide toggle
+4. **Test Key**: validates the key with a minimal API call
+5. Display name
+6. **Add Model**: saves to DB (no pull needed for API models)
+
+### Delete a model
+
+Click 🗑 on any model in the table. For Ollama models, this also runs `ollama rm` to free disk space.
+
+## Supported LLM Providers
+
+The system uses **LiteLLM** for unified model access. Supported providers:
+
+| Provider | Model ID format | Env variable |
+|----------|----------------|-------------|
+| Ollama (local) | `ollama/qwen2.5:7b` | `OLLAMA_BASE_URL` |
+| OpenAI | `openai/gpt-4o` | `OPENAI_API_KEY` |
+| Anthropic | `anthropic/claude-3-haiku-20240307` | `ANTHROPIC_API_KEY` |
+| DeepSeek | `deepseek/deepseek-chat` | `DEEPSEEK_API_KEY` |
+| Groq | `groq/llama-3.3-70b-versatile` | `GROQ_API_KEY` |
+| Mistral | `mistral/mistral-large-latest` | `MISTRAL_API_KEY` |
+
+API keys for non-Ollama models are stored in the database and passed to LiteLLM at runtime.
+
+## Agent Evaluation
+
+Run the Level 2 agent output quality evaluation on synthetic data:
+
+```bash
+docker compose exec backend python -m tests.model_evaluation
+```
+
+With specific model and multiple runs:
+
+```bash
+docker compose exec backend python -m tests.model_evaluation --model ollama/qwen2.5:7b --n-runs 3
+```
+
+Measures 7 quality metrics:
+- **Plan validity** — agent produces ≥2 actionable steps
+- **Critic JSON parse** — critic returns valid JSON
+- **Contradiction recall** — critic flags planted contaminants (FGB)
+- **Report structure** — all required sections present
+- **Hallucination score** — 0 mismatches between narrative and ground truth
+- **Round count** — agent loop iterations
+- **Latency** — wall time in seconds
 
 ## Testing
 
 ```bash
-cd backend && pytest
+# Backend tests (73 tests)
+docker compose exec backend python -m pytest --tb=short
+
+# Frontend lint + build
 cd frontend && npm run lint && npm run build
 ```
 
-The analysis engine's pure logic (alignment, RAG retrieval, report assembly, UniProt classification) is unit-tested without external services; the database- and Qdrant-backed paths are exercised by the Postgres-backed suite.
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POSTGRES_USER` | postgres | Database user |
+| `POSTGRES_PASSWORD` | postgres | Database password |
+| `POSTGRES_DB` | postgres | Database name |
+| `POSTGRES_HOST` | db (Docker) / localhost | Database host |
+| `POSTGRES_PORT` | 5432 | Database port |
+| `JWT_SECRET_KEY` | — | JWT signing key |
+| `JWT_ALGORITHM` | HS256 | JWT algorithm |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | 180 | Token expiry |
+| `MATCHMAKER_LLM` | ollama/qwen2.5:7b | Default LLM model |
+| `OLLAMA_BASE_URL` | http://ollama:11434 | Ollama API URL |
+| `QDRANT_URL` | http://vector-db:6333 | Qdrant URL |
+| `FRONTEND_ORIGIN` | http://localhost:3000 | CORS origin |
+
+## Troubleshooting
+
+**Run fails with "no dataset version found"** — register the dataset, then run the ingestion command. The dataset must have a `DatasetVersion` with status `normalized`.
+
+**Index document doesn't work** — ensure `storage_path` starts with `/` (e.g., `/data/pdfs/heart-map.pdf` not `data/pdfs/...`). Indexing runs in the worker container which has `sentence-transformers`.
+
+**Ollama connection refused** — check `OLLAMA_BASE_URL` is set in the service's environment (compose.yml). The backend container needs this env var to proxy Ollama API calls and for the evaluation script.
+
+**LiteLLM authentication fails** — for DeepSeek, the error `governor` means region-locked API key. Ensure the key is from `platform.deepseek.com` (international), not the China-specific platform.
+
+**CORS errors in browser** — restart the backend container after any `main.py` changes. The auth middleware now includes CORS headers on 401/500 responses.

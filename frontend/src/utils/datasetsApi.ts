@@ -30,3 +30,24 @@ export function createDataset(projectId: string, payload: DatasetCreatePayload) 
     body: JSON.stringify(payload),
   });
 }
+
+export function deleteDataset(projectId: string, datasetId: string) {
+  return apiRequest<void>(`/api/v1/projects/${projectId}/datasets/${datasetId}`, {
+    method: "DELETE",
+  });
+}
+
+export interface DatasetUpdatePayload {
+  name?: string;
+  type?: string;
+  original_filename?: string;
+  storage_path?: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export function updateDataset(projectId: string, datasetId: string, payload: DatasetUpdatePayload) {
+  return apiRequest<Dataset>(`/api/v1/projects/${projectId}/datasets/${datasetId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}

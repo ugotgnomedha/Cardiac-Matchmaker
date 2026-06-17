@@ -1,10 +1,12 @@
 import { Button, Form } from "@heroui/react";
-import { startTransition, useState, type FormEvent } from "react";
+import { startTransition, useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
+import useSWR from "swr";
 
 import { AppLayout } from "../components/AppLayout";
 import { FormFields, type FormFieldConfig } from "../components/FormFields";
 import { isApiError } from "../utils/api";
+import type { ModelConfig } from "../utils/modelsApi";
 import { createRun } from "../utils/runsApi";
 import { parseOptionalJson } from "../utils/view";
 
@@ -17,6 +19,17 @@ export function NewRunPage() {
   const [constraints, setConstraints] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const { data: models } = useSWR<ModelConfig[]>("/api/v1/models");
+  const [selectedModelId, setSelectedModelId] = useState("");
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (models && models.length === 1) {
+      setSelectedModelId(models[0].model_id);
+    }
+  }, [models]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!projectId) {
     return <Navigate to="/" replace />;
@@ -85,6 +98,7 @@ export function NewRunPage() {
         target_tissue: targetTissue,
         query,
         constraints: parseOptionalJson(constraints),
+        selected_config: selectedModelId ? { model: selectedModelId } : undefined,
       });
 
       startTransition(() => {
@@ -103,6 +117,53 @@ export function NewRunPage() {
     }
   }
 
+  const modelSelector = models === undefined ? (
+    <p className="text-sm text-zinc-500">Loading models...</p>
+  ) : models.length === 0 ? (
+    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+      No models configured.{" "}
+      <Link to="/models/new" className="underline">
+        Add one
+      </Link>{" "}
+      first.
+    </p>
+  ) : models.length === 1 ? (
+    <div className="grid gap-1.5">
+      <span className="text-sm font-medium text-zinc-700">Model</span>
+      <input
+        className="h-10 rounded-lg border border-zinc-300 px-3 text-zinc-500 bg-zinc-50"
+        readOnly
+        value={models[0].name}
+      />
+      <span className="text-xs text-zinc-500">
+        Only one model available. This model will be used.
+      </span>
+    </div>
+  ) : (
+    <div className="grid gap-1.5">
+      <label className="text-sm font-medium text-zinc-700" htmlFor="model-select">
+        Model
+      </label>
+      <select
+        className="h-10 rounded-lg border border-zinc-300 px-3 text-zinc-950"
+        id="model-select"
+        onChange={(e) => setSelectedModelId(e.target.value)}
+        required
+        value={selectedModelId}
+      >
+        <option value="">Select model...</option>
+        {models.map((m) => (
+          <option key={m.id} value={m.model_id}>
+            {m.name} ({m.provider})
+          </option>
+        ))}
+      </select>
+      <span className="text-xs text-zinc-500">
+        Select the LLM to power the reasoning agent for this run.
+      </span>
+    </div>
+  );
+
   return (
     <AppLayout
       breadcrumbs={[
@@ -119,6 +180,8 @@ export function NewRunPage() {
       >
         <FormFields fields={runFields} />
 
+        {modelSelector}
+
         {errorMessage ? (
           <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
             {errorMessage}
@@ -128,7 +191,7 @@ export function NewRunPage() {
         <div className="flex flex-wrap gap-2">
           <Button
             className="h-10 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800"
-            isDisabled={isSubmitting}
+            isDisabled={isSubmitting || (models?.length ?? 0) === 0}
             type="submit"
           >
             {isSubmitting ? "Creating..." : "Create Run"}

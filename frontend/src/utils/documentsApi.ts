@@ -38,3 +38,21 @@ export function createDocument(
     },
   );
 }
+
+export function deleteDocument(projectId: string, documentId: string) {
+  return apiRequest<void>(`/api/v1/projects/${projectId}/documents/${documentId}`, {
+    method: "DELETE",
+  });
+}
+
+export interface IndexDocumentResult {
+  chunks: number;
+  status: string;
+}
+
+export function indexDocument(projectId: string, documentId: string) {
+  return apiRequest<IndexDocumentResult>(
+    `/api/v1/projects/${projectId}/documents/${documentId}/index`,
+    { method: "POST" },
+  );
+}

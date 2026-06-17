@@ -14,6 +14,7 @@ from app.models.document.document_model import Document, DocumentChunk
 from app.models.evidence.evidence_model import ContradictionWarning, EvidenceItem
 from app.models.feature.feature_model import FeatureAnnotation
 from app.models.job.job_model import ProcessingJob
+from app.models.model.model_config_model import ModelConfig
 from app.models.project.project_model import ResearchProject
 from app.models.report.report_model import Report
 from app.models.run.run_model import AnalysisRun, AnalysisStep, CandidateMatch, CardiacApplicationQuery
@@ -39,6 +40,7 @@ REPORT_TABLE_NAME = "report"
 PROCESSING_JOB_TABLE_NAME = "processing_job"
 PREPROCESSING_RUN_TABLE_NAME = "preprocessing_run"
 FEATURE_ANNOTATION_TABLE_NAME = "feature_annotation"
+MODEL_CONFIG_TABLE_NAME = "model_config"
 
 
 def utc_now() -> datetime:
@@ -254,6 +256,18 @@ EXPECTED_FEATURE_ANNOTATION_COLUMNS = {
     "present_in_heart",
     "created_at",
 }
+EXPECTED_MODEL_CONFIG_COLUMNS = {
+    "id",
+    "name",
+    "provider",
+    "model_id",
+    "api_key_encrypted",
+    "is_active",
+    "status",
+    "metadata_",
+    "created_at",
+    "updated_at",
+}
 PROJECT_DATASET_TABLE_EXPECTATIONS = {
 	PROJECT_TABLE_NAME: EXPECTED_PROJECT_COLUMNS,
 	DATASET_TABLE_NAME: EXPECTED_DATASET_COLUMNS,
@@ -286,6 +300,9 @@ PREPROCESSING_RUN_TABLE_EXPECTATIONS = {
 }
 FEATURE_ANNOTATION_TABLE_EXPECTATIONS = {
     FEATURE_ANNOTATION_TABLE_NAME: EXPECTED_FEATURE_ANNOTATION_COLUMNS,
+}
+MODEL_CONFIG_TABLE_EXPECTATIONS = {
+    MODEL_CONFIG_TABLE_NAME: EXPECTED_MODEL_CONFIG_COLUMNS,
 }
 
 
@@ -552,6 +569,18 @@ def apply_feature_annotation_schema(_migrator: PostgresqlMigrator) -> None:
     db.create_tables([FeatureAnnotation], safe=True)
     raise_partial_schema_error("Feature annotation", FEATURE_ANNOTATION_TABLE_EXPECTATIONS)
 
+
+def model_config_schema_is_satisfied() -> bool:
+    return tables_schema_is_satisfied(MODEL_CONFIG_TABLE_EXPECTATIONS)
+
+
+def apply_model_config_schema(_migrator: PostgresqlMigrator) -> None:
+    db.create_tables([ModelConfig], safe=True)
+    if table_exists(MODEL_CONFIG_TABLE_NAME) and "status" not in get_table_columns(MODEL_CONFIG_TABLE_NAME):
+        db.execute_sql(f'ALTER TABLE "{MODEL_CONFIG_TABLE_NAME}" ADD COLUMN status VARCHAR(50) DEFAULT \'ready\'')
+    raise_partial_schema_error("Model config", MODEL_CONFIG_TABLE_EXPECTATIONS)
+
+
 def get_migrations() -> list[MigrationDefinition]:
 	return [
 		MigrationDefinition(
@@ -589,6 +618,12 @@ def get_migrations() -> list[MigrationDefinition]:
 			description="Create feature_annotation table for per-protein matrisome/heart annotation",
 			is_satisfied=feature_annotation_schema_is_satisfied,
 			apply=apply_feature_annotation_schema,
+		),
+		MigrationDefinition(
+			name="0007_model_config_schema",
+			description="Create model_config table for LLM model management",
+			is_satisfied=model_config_schema_is_satisfied,
+			apply=apply_model_config_schema,
 		),
 	]
 

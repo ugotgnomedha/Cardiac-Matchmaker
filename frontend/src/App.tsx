@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AddModelPage } from "./pages/AddModelPage";
+import { DatasetEditPage } from "./pages/DatasetEditPage";
 import { DatasetUploadPage } from "./pages/DatasetUploadPage";
 import { DocumentUploadPage } from "./pages/DocumentUploadPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -23,10 +25,15 @@ function App() {
           element={<DatasetUploadPage />}
         />
         <Route
+          path="/projects/:projectId/datasets/:datasetId/edit"
+          element={<DatasetEditPage />}
+        />
+        <Route
           path="/projects/:projectId/documents/new"
           element={<DocumentUploadPage />}
         />
         <Route path="/projects/:projectId/runs/new" element={<NewRunPage />} />
+        <Route path="/models/new" element={<AddModelPage />} />
         <Route path="/runs/:runId" element={<RunDetailPage />} />
         <Route path="/runs/:runId/report" element={<ReportPage />} />
         <Route path="/logout" element={<LogoutPage />} />

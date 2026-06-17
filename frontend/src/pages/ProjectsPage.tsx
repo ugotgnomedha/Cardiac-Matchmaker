@@ -1,19 +1,25 @@
 import { Button, Form } from "@heroui/react";
 import { startTransition, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 
 import { AppLayout } from "../components/AppLayout";
 import { FormFields, type FormFieldConfig } from "../components/FormFields";
 import { isApiError } from "../utils/api";
+import type { ModelConfig } from "../utils/modelsApi";
+import { deleteModel as deleteModelApi } from "../utils/modelsApi";
 import { createProject, type Project } from "../utils/projectsApi";
 import { formatDate } from "../utils/view";
 
 export function ProjectsPage() {
   const navigate = useNavigate();
-  const { data, error, isLoading, mutate } = useSWR<Project[]>(
+  const { data, error, isLoading, mutate: mutateProjects } = useSWR<Project[]>(
     "/api/v1/projects",
   );
+  const { data: models } = useSWR<ModelConfig[]>("/api/v1/models", {
+    refreshInterval: (latest) =>
+      latest?.some((m) => m.status === "pulling") ? 2000 : 0,
+  });
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,7 +61,7 @@ export function ProjectsPage() {
         name,
         description: description.trim() ? description : null,
       });
-      await mutate();
+      await mutateProjects();
       setName("");
       setDescription("");
 
@@ -142,6 +148,55 @@ export function ProjectsPage() {
               </div>
             )}
           </section>
+      </section>
+
+      <section className="mt-5 rounded-lg border border-zinc-200 bg-white">
+        <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
+          <h2 className="text-lg font-semibold tracking-normal">Available Models</h2>
+          <Link
+            className="inline-flex h-9 items-center rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800"
+            to="/models/new"
+          >
+            Add Model
+          </Link>
+        </div>
+        {(models ?? []).length === 0 ? (
+          <p className="px-5 py-6 text-sm text-zinc-600">No models configured.</p>
+        ) : (
+          <div className="divide-y divide-zinc-200">
+            {(models ?? []).map((m) => (
+              <div className="flex items-center justify-between gap-3 px-5 py-3" key={m.id}>
+                <div className="grid gap-0.5 min-w-0 flex-1">
+                  <span className="font-medium truncate">{m.name}</span>
+                  <span className="text-xs text-zinc-500">
+                    {m.provider === "ollama" ? "Ollama" : "LiteLLM"} · {m.model_id}
+                  </span>
+                  {m.status === "pulling" ? (
+                    <div className="mt-1 h-1.5 w-full rounded-full bg-zinc-200">
+                      <div className="h-1.5 animate-pulse rounded-full bg-teal-600/50 w-full" />
+                    </div>
+                  ) : m.status === "error" ? (
+                    <span className="text-xs text-rose-600">Pull failed</span>
+                  ) : null}
+                </div>
+                <button
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-rose-50 hover:text-rose-600"
+                  onClick={async () => {
+                    await deleteModelApi(m.id);
+                    mutate("/api/v1/models");
+                  }}
+                  title="Remove model"
+                  type="button"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m3 0v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6h14" />
+                    <path d="M10 11v6M14 11v6" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </AppLayout>
   );

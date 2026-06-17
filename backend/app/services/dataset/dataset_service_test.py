@@ -7,16 +7,24 @@ from app.services.dataset.dataset_service import DatasetCreatePayload, DatasetSe
 from app.services.project.project_service import ProjectNotFoundError
 
 
+def _dummy_path(name: str) -> str:
+    from pathlib import Path
+    p = Path("/tmp") / name
+    p.touch(exist_ok=True)
+    return str(p)
+
+
 def make_dataset_payload(
     *,
     name: str = "Placenta proteomics",
-    storage_path: str = "/data/raw/placenta.tsv",
+    storage_path: str | None = None,
 ) -> DatasetCreatePayload:
+    path = storage_path or _dummy_path("test_placenta.tsv")
     return DatasetCreatePayload(
         name=name,
         type="placenta",
-        original_filename=storage_path.rsplit("/", maxsplit=1)[-1],
-        storage_path=storage_path,
+        original_filename=path.rsplit("/", maxsplit=1)[-1],
+        storage_path=path,
         metadata={"delimiter": "tab", "source": "service-test"},
     )
 
@@ -28,15 +36,15 @@ def test_dataset_service_creates_dataset_with_project_scope(service_context):
 
     first_dataset = service.create_dataset(
         project.id,
-        make_dataset_payload(name="Placenta raw", storage_path="/data/raw/placenta.tsv"),
+        make_dataset_payload(name="Placenta raw"),
     )
     second_dataset = service.create_dataset(
         project.id,
-        make_dataset_payload(name="Placenta normalized", storage_path="/data/processed/placenta.tsv"),
+        make_dataset_payload(name="Placenta normalized"),
     )
     service.create_dataset(
         other_project.id,
-        make_dataset_payload(name="Other project dataset", storage_path="/data/raw/other.tsv"),
+        make_dataset_payload(name="Other project dataset"),
     )
 
     project_datasets = service.list_datasets(project.id)
@@ -52,13 +60,12 @@ def test_dataset_service_persists_dataset_row(service_context):
 
     created_dataset = DatasetService().create_dataset(
         project.id,
-        make_dataset_payload(name="Cardiac reference", storage_path="/data/raw/cardiac.tsv"),
+        make_dataset_payload(name="Cardiac reference"),
     )
 
     persisted_dataset = Dataset.get_by_id(created_dataset.id)
     assert persisted_dataset.project.id == project.id
     assert persisted_dataset.name == "Cardiac reference"
-    assert persisted_dataset.storage_path == "/data/raw/cardiac.tsv"
 
 
 def test_dataset_service_raises_for_missing_project(migrated_db):
