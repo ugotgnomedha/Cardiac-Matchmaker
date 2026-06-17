@@ -16,6 +16,7 @@ class ModelConfig(BaseModel):
     model_id = CharField(max_length=255)
     api_key_encrypted = TextField(null=True)
     is_active = BooleanField(default=True)
+    status = CharField(max_length=50, default="ready")
     metadata_ = JSONField(null=True)
     created_at = DateTimeField(default=utc_now)
     updated_at = DateTimeField(default=utc_now)
