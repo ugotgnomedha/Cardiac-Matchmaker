@@ -1,9 +1,11 @@
 import argparse
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
 
 from peewee import BooleanField, CharField, DateTimeField, Model
+from psycopg.types.json import Jsonb
 from playhouse.migrate import PostgresqlMigrator, migrate
 
 from app.models.base.base_model import db
@@ -14,7 +16,7 @@ from app.models.feature.feature_model import FeatureAnnotation
 from app.models.job.job_model import ProcessingJob
 from app.models.project.project_model import ResearchProject
 from app.models.report.report_model import Report
-from app.models.run.run_model import AnalysisRun, AnalysisStep, CandidateMatch
+from app.models.run.run_model import AnalysisRun, AnalysisStep, CandidateMatch, CardiacApplicationQuery
 from app.models.user.user_model import User
 from app.models.sample.sample_model import Sample, Measurement
 from app.models.preprocessing.preprocessing_run_model import PreprocessingRun
@@ -28,6 +30,7 @@ DATASET_VERSION_TABLE_NAME = "dataset_version"
 DOCUMENT_TABLE_NAME = "document"
 DOCUMENT_CHUNK_TABLE_NAME = "document_chunk"
 ANALYSIS_RUN_TABLE_NAME = "analysis_run"
+CARDIAC_APPLICATION_QUERY_TABLE_NAME = "cardiac_application_query"
 ANALYSIS_STEP_TABLE_NAME = "analysis_step"
 CANDIDATE_MATCH_TABLE_NAME = "candidate_match"
 EVIDENCE_ITEM_TABLE_NAME = "evidence_item"
@@ -119,14 +122,23 @@ EXPECTED_DOCUMENT_CHUNK_COLUMNS = {
 EXPECTED_ANALYSIS_RUN_COLUMNS = {
 	"id",
 	"project_id",
+	"application_query_id",
 	"status",
-	"query",
-	"target_application",
-	"target_tissue",
-	"constraints",
+	"selected_config",
 	"started_at",
 	"finished_at",
 	"error_message",
+	"created_at",
+	"updated_at",
+}
+EXPECTED_CARDIAC_APPLICATION_QUERY_COLUMNS = {
+	"id",
+	"project_id",
+	"query_text",
+	"target_application",
+	"target_tissue",
+	"function_target",
+	"constraints",
 	"created_at",
 	"updated_at",
 }
@@ -250,6 +262,7 @@ PROJECT_DATASET_TABLE_EXPECTATIONS = {
 WORKFLOW_TABLE_EXPECTATIONS = {
 	DOCUMENT_TABLE_NAME: EXPECTED_DOCUMENT_COLUMNS,
 	DOCUMENT_CHUNK_TABLE_NAME: EXPECTED_DOCUMENT_CHUNK_COLUMNS,
+	CARDIAC_APPLICATION_QUERY_TABLE_NAME: EXPECTED_CARDIAC_APPLICATION_QUERY_COLUMNS,
 	ANALYSIS_RUN_TABLE_NAME: EXPECTED_ANALYSIS_RUN_COLUMNS,
 	ANALYSIS_STEP_TABLE_NAME: EXPECTED_ANALYSIS_STEP_COLUMNS,
 	CANDIDATE_MATCH_TABLE_NAME: EXPECTED_CANDIDATE_MATCH_COLUMNS,
@@ -427,6 +440,7 @@ def apply_workflow_schema(_migrator: PostgresqlMigrator) -> None:
 		[
 			Document,
 			DocumentChunk,
+			CardiacApplicationQuery,
 			AnalysisRun,
 			AnalysisStep,
 			CandidateMatch,
@@ -437,8 +451,91 @@ def apply_workflow_schema(_migrator: PostgresqlMigrator) -> None:
 		],
 		safe=True,
 	)
+	ensure_analysis_run_query_columns()
 
 	raise_partial_schema_error("Workflow", WORKFLOW_TABLE_EXPECTATIONS)
+
+
+def ensure_analysis_run_query_columns() -> None:
+	if not table_exists(ANALYSIS_RUN_TABLE_NAME):
+		return
+
+	columns = get_table_columns(ANALYSIS_RUN_TABLE_NAME)
+	if "selected_config" not in columns:
+		db.execute_sql(f'ALTER TABLE "{ANALYSIS_RUN_TABLE_NAME}" ADD COLUMN selected_config JSONB')
+
+	if "application_query_id" not in columns:
+		db.execute_sql(f'ALTER TABLE "{ANALYSIS_RUN_TABLE_NAME}" ADD COLUMN application_query_id UUID')
+
+	columns = get_table_columns(ANALYSIS_RUN_TABLE_NAME)
+	legacy_columns = {"query", "target_application", "target_tissue", "constraints"}
+	if legacy_columns.issubset(columns):
+		backfill_application_queries()
+
+	null_count = db.execute_sql(
+		f'SELECT COUNT(*) FROM "{ANALYSIS_RUN_TABLE_NAME}" WHERE application_query_id IS NULL'
+	).fetchone()[0]
+	if null_count == 0:
+		db.execute_sql(f'ALTER TABLE "{ANALYSIS_RUN_TABLE_NAME}" ALTER COLUMN application_query_id SET NOT NULL')
+		add_application_query_fk_constraint()
+
+
+def backfill_application_queries() -> None:
+	rows = db.execute_sql(
+		f'''
+		SELECT id, project_id, query, target_application, target_tissue, constraints, created_at, updated_at
+		FROM "{ANALYSIS_RUN_TABLE_NAME}"
+		WHERE application_query_id IS NULL
+		'''
+	).fetchall()
+
+	for row in rows:
+		query_id = uuid.uuid4()
+		db.execute_sql(
+			f'''
+			INSERT INTO "{CARDIAC_APPLICATION_QUERY_TABLE_NAME}"
+				(id, project_id, query_text, target_application, target_tissue, constraints, created_at, updated_at)
+			VALUES (%s, %s, %s, %s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP), COALESCE(%s, CURRENT_TIMESTAMP))
+			''',
+			(
+				query_id,
+				row[1],
+				row[2],
+				row[3],
+				row[4],
+				Jsonb(row[5]) if row[5] is not None else None,
+				row[6],
+				row[7],
+			),
+		)
+		db.execute_sql(
+			f'UPDATE "{ANALYSIS_RUN_TABLE_NAME}" SET application_query_id = %s WHERE id = %s',
+			(query_id, row[0]),
+		)
+
+
+def add_application_query_fk_constraint() -> None:
+	constraint_name = "analysis_run_application_query_id_fkey"
+	exists = db.execute_sql(
+		"""
+		SELECT 1
+		FROM pg_constraint
+		WHERE conname = %s
+		""",
+		(constraint_name,),
+	).fetchone()
+	if exists:
+		return
+
+	db.execute_sql(
+		f'''
+		ALTER TABLE "{ANALYSIS_RUN_TABLE_NAME}"
+		ADD CONSTRAINT {constraint_name}
+		FOREIGN KEY (application_query_id)
+		REFERENCES "{CARDIAC_APPLICATION_QUERY_TABLE_NAME}" (id)
+		ON DELETE CASCADE
+		'''
+	)
 
 def apply_sample_measurement_schema(_migrator: PostgresqlMigrator) -> None:
     db.create_tables([Sample, Measurement], safe=True)
@@ -446,6 +543,8 @@ def apply_sample_measurement_schema(_migrator: PostgresqlMigrator) -> None:
 
 def apply_preprocessing_run_schema(_migrator: PostgresqlMigrator) -> None:
 	db.create_tables([PreprocessingRun], safe=True)
+	if table_exists(PREPROCESSING_RUN_TABLE_NAME) and "finished_at" not in get_table_columns(PREPROCESSING_RUN_TABLE_NAME):
+		db.execute_sql(f'ALTER TABLE "{PREPROCESSING_RUN_TABLE_NAME}" ADD COLUMN finished_at TIMESTAMP WITH TIME ZONE')
 	raise_partial_schema_error("Preprocessing run", PREPROCESSING_RUN_TABLE_EXPECTATIONS)
 
 

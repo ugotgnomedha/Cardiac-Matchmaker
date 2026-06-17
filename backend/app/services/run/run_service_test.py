@@ -6,7 +6,7 @@ import pytest
 from app.models.evidence.evidence_model import EvidenceItem
 from app.models.job.job_model import ProcessingJob
 from app.models.report.report_model import Report
-from app.models.run.run_model import AnalysisRun, AnalysisStep, CandidateMatch
+from app.models.run.run_model import AnalysisRun, AnalysisStep, CandidateMatch, CardiacApplicationQuery
 from app.services.run.run_service import (
     ReportNotFoundError,
     RunCreatePayload,
@@ -48,6 +48,8 @@ def test_run_service_creates_queued_run_job_and_lists_by_project(service_context
 
     assert run.status == "queued"
     assert run.project_id == project.id
+    application_query = CardiacApplicationQuery.get_by_id(run.application_query_id)
+    assert application_query.query_text == make_run_payload().query
     assert [project_run.id for project_run in project_runs] == [run.id]
     assert len(queued_jobs) == 1
     assert queued_jobs[0].payload["project_id"] == str(project.id)
