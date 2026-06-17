@@ -11,12 +11,31 @@ import {
   type OllamaModel,
 } from "../utils/modelsApi";
 
-const LITELLM_PROVIDERS: Record<string, { label: string; prefix: string; defaultModel: string }> = {
+const LITELLM_PROVIDERS: Record<
+  string,
+  { label: string; prefix: string; defaultModel: string }
+> = {
   openai: { label: "OpenAI", prefix: "openai/", defaultModel: "gpt-4o" },
-  anthropic: { label: "Anthropic", prefix: "anthropic/", defaultModel: "claude-3-haiku-20240307" },
-  deepseek: { label: "DeepSeek", prefix: "deepseek/", defaultModel: "deepseek-chat" },
-  groq: { label: "Groq", prefix: "groq/", defaultModel: "llama-3.3-70b-versatile" },
-  mistral: { label: "Mistral", prefix: "mistral/", defaultModel: "mistral-large-latest" },
+  anthropic: {
+    label: "Anthropic",
+    prefix: "anthropic/",
+    defaultModel: "claude-3-haiku-20240307",
+  },
+  deepseek: {
+    label: "DeepSeek",
+    prefix: "deepseek/",
+    defaultModel: "deepseek-chat",
+  },
+  groq: {
+    label: "Groq",
+    prefix: "groq/",
+    defaultModel: "llama-3.3-70b-versatile",
+  },
+  mistral: {
+    label: "Mistral",
+    prefix: "mistral/",
+    defaultModel: "mistral-large-latest",
+  },
 };
 
 export function AddModelPage() {
@@ -30,10 +49,12 @@ export function AddModelPage() {
   const [pulling, setPulling] = useState(false);
 
   const [litellmProvider, setLitellmProvider] = useState("openai");
-  const [litellmModelId, setLitellmModelId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
-  const [keyTestResult, setKeyTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [keyTestResult, setKeyTestResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
   const [testing, setTesting] = useState(false);
   const [litellmName, setLitellmName] = useState("");
 
@@ -42,18 +63,27 @@ export function AddModelPage() {
 
   useEffect(() => {
     if (tab === "ollama") {
-      setOllamaFetchError(null);
       listOllamaModels()
         .then((r) => setOllamaModels(r.models ?? []))
-        .catch((e) => setOllamaFetchError(isApiError(e) ? e.message : String(e)));
+        .catch((e) =>
+          setOllamaFetchError(isApiError(e) ? e.message : String(e)),
+        );
     }
   }, [tab]);
 
-  useEffect(() => {
-    const p = LITELLM_PROVIDERS[litellmProvider];
+  const [litellmModelId, setLitellmModelId] = useState(
+    (() => {
+      const p = LITELLM_PROVIDERS["openai"];
+      return p.prefix + p.defaultModel;
+    })(),
+  );
+
+  function handleProviderChange(value: string) {
+    setLitellmProvider(value);
+    const p = LITELLM_PROVIDERS[value];
     setLitellmModelId(p ? p.prefix + p.defaultModel : "");
     setKeyTestResult(null);
-  }, [litellmProvider]);
+  }
 
   async function handleTestKey() {
     setTesting(true);
@@ -62,7 +92,10 @@ export function AddModelPage() {
       const r = await testApiKey(litellmProvider, litellmModelId, apiKey);
       setKeyTestResult({ ok: true, message: `OK — model: ${r.model}` });
     } catch (e) {
-      setKeyTestResult({ ok: false, message: isApiError(e) ? e.message : String(e) });
+      setKeyTestResult({
+        ok: false,
+        message: isApiError(e) ? e.message : String(e),
+      });
     } finally {
       setTesting(false);
     }
@@ -74,7 +107,11 @@ export function AddModelPage() {
     setErrorMessage(null);
     setPulling(true);
     try {
-      await addModel({ name: displayName, provider: "ollama", model_id: modelTag });
+      await addModel({
+        name: displayName,
+        provider: "ollama",
+        model_id: modelTag,
+      });
       startTransition(() => navigate("/"));
     } catch (err) {
       setErrorMessage(isApiError(err) ? err.message : "Failed to add model");
@@ -89,7 +126,12 @@ export function AddModelPage() {
     setErrorMessage(null);
     setIsSubmitting(true);
     try {
-      await addModel({ name: litellmName, provider: "litellm", model_id: litellmModelId, api_key: apiKey });
+      await addModel({
+        name: litellmName,
+        provider: "litellm",
+        model_id: litellmModelId,
+        api_key: apiKey,
+      });
       startTransition(() => navigate("/"));
     } catch (err) {
       setErrorMessage(isApiError(err) ? err.message : "Failed to add model");
@@ -100,10 +142,7 @@ export function AddModelPage() {
 
   return (
     <AppLayout
-      breadcrumbs={[
-        { label: "Projects", to: "/" },
-        { label: "Add Model" },
-      ]}
+      breadcrumbs={[{ label: "Projects", to: "/" }, { label: "Add Model" }]}
       maxWidthClassName="max-w-xl"
       title="Add Model"
     >
@@ -121,7 +160,10 @@ export function AddModelPage() {
       </div>
 
       {tab === "ollama" ? (
-        <form className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-5" onSubmit={handleOllamaSubmit}>
+        <form
+          className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-5"
+          onSubmit={handleOllamaSubmit}
+        >
           {ollamaFetchError ? (
             <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
               Could not fetch Ollama models: {ollamaFetchError}
@@ -144,7 +186,9 @@ export function AddModelPage() {
                   {m.name} ({(m.size / 1e9).toFixed(1)} GB) — downloaded
                 </option>
               ))}
-              {ollamaModels.length > 0 ? <option disabled>── not downloaded ──</option> : null}
+              {ollamaModels.length > 0 ? (
+                <option disabled>── not downloaded ──</option>
+              ) : null}
               <option value="qwen2.5:7b">qwen2.5:7b</option>
               <option value="qwen2.5:14b">qwen2.5:14b</option>
               <option value="qwen2.5:32b">qwen2.5:32b</option>
@@ -197,16 +241,21 @@ export function AddModelPage() {
           </div>
         </form>
       ) : (
-        <form className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-5" onSubmit={handleLitellmSubmit}>
+        <form
+          className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-5"
+          onSubmit={handleLitellmSubmit}
+        >
           <label className="grid gap-1.5 text-sm font-medium text-zinc-700">
             Provider
             <select
               className="h-10 rounded-lg border border-zinc-300 px-3 text-zinc-950"
               value={litellmProvider}
-              onChange={(e) => setLitellmProvider(e.target.value)}
+              onChange={(e) => handleProviderChange(e.target.value)}
             >
               {Object.entries(LITELLM_PROVIDERS).map(([k, v]) => (
-                <option key={k} value={k}>{v.label}</option>
+                <option key={k} value={k}>
+                  {v.label}
+                </option>
               ))}
             </select>
           </label>
@@ -231,7 +280,10 @@ export function AddModelPage() {
               />
               <button
                 className="inline-flex h-10 items-center rounded-lg border border-zinc-300 px-3 text-xs font-medium hover:bg-zinc-50"
-                onClick={(e) => { e.preventDefault(); setShowKey(!showKey); }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShowKey(!showKey);
+                }}
                 type="button"
               >
                 {showKey ? "Hide" : "Show"}
@@ -242,13 +294,18 @@ export function AddModelPage() {
             <button
               className="inline-flex h-9 items-center rounded-lg border border-zinc-300 px-4 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50"
               disabled={testing || !apiKey}
-              onClick={(e) => { e.preventDefault(); handleTestKey(); }}
+              onClick={(e) => {
+                e.preventDefault();
+                handleTestKey();
+              }}
               type="button"
             >
               {testing ? "Testing..." : "Test Key"}
             </button>
             {keyTestResult && (
-              <span className={`text-sm font-medium ${keyTestResult.ok ? "text-teal-700" : "text-rose-700"}`}>
+              <span
+                className={`text-sm font-medium ${keyTestResult.ok ? "text-teal-700" : "text-rose-700"}`}
+              >
                 {keyTestResult.ok ? "✓" : "✗"} {keyTestResult.message}
               </span>
             )}

@@ -17,6 +17,8 @@ export function DatasetEditPage() {
     projectId ? `/api/v1/projects/${projectId}/datasets` : null,
   );
 
+  const found = (datasets ?? []).find((d) => d.id === datasetId);
+
   const [name, setName] = useState("");
   const [type, setType] = useState("placenta");
   const [originalFilename, setOriginalFilename] = useState("");
@@ -25,20 +27,17 @@ export function DatasetEditPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (datasets) {
-      const found = datasets.find((d) => d.id === datasetId);
-      if (found) {
-        setName(found.name);
-        setType(found.type);
-        setOriginalFilename(found.original_filename);
-        setStoragePath(found.storage_path);
-        setMetadata(
-          found.metadata ? JSON.stringify(found.metadata, null, 2) : "",
-        );
-      }
+    if (found) {
+      setName(found.name);
+      setType(found.type);
+      setOriginalFilename(found.original_filename);
+      setStoragePath(found.storage_path);
+      setMetadata(found.metadata ? JSON.stringify(found.metadata, null, 2) : "");
     }
-  }, [datasets, datasetId]);
+  }, [found]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!projectId || !datasetId) {
     return <Navigate to="/" replace />;

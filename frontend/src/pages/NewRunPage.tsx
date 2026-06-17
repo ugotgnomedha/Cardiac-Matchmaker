@@ -23,11 +23,13 @@ export function NewRunPage() {
   const { data: models } = useSWR<ModelConfig[]>("/api/v1/models");
   const [selectedModelId, setSelectedModelId] = useState("");
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (models && models.length === 1) {
       setSelectedModelId(models[0].model_id);
     }
   }, [models]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!projectId) {
     return <Navigate to="/" replace />;
