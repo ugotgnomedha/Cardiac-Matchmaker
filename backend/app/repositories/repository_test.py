@@ -1,3 +1,6 @@
+from typing import cast
+from uuid import UUID
+
 from app.models.job.job_model import ProcessingJob
 from app.repositories.dataset_repository import DatasetRepository
 from app.repositories.document_repository import DocumentRepository
@@ -66,11 +69,19 @@ def test_repositories_create_read_update_and_list_core_workflow(service_context)
         markdown_body="# Ready report",
     )
 
-    assert project_repository.get(project.id).description == "Updated"
-    assert dataset_repository.list_for_project(project.id)[0].id == dataset.id
-    assert document_repository.list_for_project(project.id)[0].id == document.id
-    assert run_repository.list_for_project(project.id)[0].id == run.id
-    assert candidate_repository.list_for_run(run.id)[0].id == candidate.id
-    assert evidence_repository.list_for_run(run.id)[0].id == evidence.id
-    assert report_repository.get_latest_for_run(run.id).id == report.id
-    assert ProcessingJob.get(ProcessingJob.payload["analysis_run_id"] == str(run.id)).status == "queued"
+    project_id = cast(UUID, project.id)
+    run_id = cast(UUID, run.id)
+
+    fetched_project = project_repository.get(project_id)
+    latest_report = report_repository.get_latest_for_run(run_id)
+
+    assert fetched_project is not None
+    assert latest_report is not None
+    assert fetched_project.description == "Updated"
+    assert dataset_repository.list_for_project(project_id)[0].id == dataset.id
+    assert document_repository.list_for_project(project_id)[0].id == document.id
+    assert run_repository.list_for_project(project_id)[0].id == run.id
+    assert candidate_repository.list_for_run(run_id)[0].id == candidate.id
+    assert evidence_repository.list_for_run(run_id)[0].id == evidence.id
+    assert latest_report.id == report.id
+    assert ProcessingJob.get(ProcessingJob.payload["analysis_run_id"] == str(run_id)).status == "queued"
