@@ -114,7 +114,7 @@ class DataPreparationService:
 
                     batch.append({
                         "id": uuid4(),
-                        "sample": sample_map[col],
+                        "sample": getattr(sample_map[col], "id"),
                         "feature_name": gene_name,
                         "raw_value": raw_val,
                         "normalized_value": None,
