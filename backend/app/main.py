@@ -62,9 +62,10 @@ def _cors_401(request: Request) -> JSONResponse:
 def _cors_error(request: Request, status_code: int, detail: str) -> JSONResponse:
     resp = JSONResponse(status_code=status_code, content={"detail": detail})
     origin = request.headers.get("origin", "")
-    if origin:
+    if origin and origin in frontend_origins:
         resp.headers["Access-Control-Allow-Origin"] = origin
         resp.headers["Access-Control-Allow-Credentials"] = "true"
+        resp.headers["Vary"] = "Origin"
     return resp
 
 
