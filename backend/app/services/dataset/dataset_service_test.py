@@ -10,7 +10,7 @@ from app.services.project.project_service import ProjectNotFoundError
 def _dummy_path(name: str) -> str:
     from pathlib import Path
     p = Path("/tmp") / name
-    p.touch(exist_ok=True)
+    p.write_text("GeneName\tUniProt\tLocation\tMatrisomeDivision\tMatrisomeCategory\tAmnion_decell_1\tlargeAtery\n")
     return str(p)
 
 
