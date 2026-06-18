@@ -68,7 +68,7 @@ class DatasetService:
             metadata=payload.metadata,
         )
 
-        self._ingest(dataset)
+        self._ingest(dataset) if dataset.type in ("placenta", "placenta_heart_merged") else None
 
         return self._to_read_model(dataset)
 

@@ -106,6 +106,59 @@ User creates Run ──▶ ProcessingJob ──▶ Worker picks up ──▶ Ana
                viewable in UI)
 ```
 
+## Model Management
+
+The main page (`/`) shows an **Available Models** table below the project list.
+
+### Quick Pull
+
+Click **Pull** next to the table header. An inline form opens with a model tag select:
+
+- Downloaded models shown first (marked as `downloaded`)
+- Popular models follow for auto-pull
+- Select a tag, click **Pull** — the model downloads in background and appears in the table with a progress bar
+
+It could take sometime - depends on your internet connection
+
+### Add a model (advanced)
+
+Click **Add Model** for full configuration. Two tabs:
+
+**Local (Ollama):**
+
+1. Model tag dropdown: downloaded models shown first (with size), then popular models for auto-pull
+2. Display name: auto-fills from model tag
+3. **Pull & Add**: downloads the model from Ollama registry, saves to DB, redirects to main page
+4. The model shows as `pulling` with an animated progress bar until ready
+
+**API (LiteLLM):**
+
+1. Provider: OpenAI / Anthropic / DeepSeek / Groq / Mistral
+2. Model ID: auto-prefilled (e.g., `openai/gpt-4o`)
+3. API Key: with show/hide toggle
+4. **Test Key**: validates the key with a minimal API call
+5. Display name
+6. **Add Model**: saves to DB (no pull needed for API models)
+
+### Delete a model
+
+Click 🗑 on any model in the table. For Ollama models, this also runs `ollama rm` to free disk space.
+
+## Supported LLM Providers
+
+The system uses **LiteLLM** for unified model access. Supported providers:
+
+| Provider       | Model ID format                     | Env variable        |
+| -------------- | ----------------------------------- | ------------------- |
+| Ollama (local) | `ollama/qwen2.5:7b`                 | `OLLAMA_BASE_URL`   |
+| OpenAI         | `openai/gpt-4o`                     | `OPENAI_API_KEY`    |
+| Anthropic      | `anthropic/claude-3-haiku-20240307` | `ANTHROPIC_API_KEY` |
+| DeepSeek       | `deepseek/deepseek-chat`            | `DEEPSEEK_API_KEY`  |
+| Groq           | `groq/llama-3.3-70b-versatile`      | `GROQ_API_KEY`      |
+| Mistral        | `mistral/mistral-large-latest`      | `MISTRAL_API_KEY`   |
+
+API keys for non-Ollama models are stored in the database and passed to LiteLLM at runtime.
+
 ## First Launch
 
 ### 1. Create a user
@@ -217,57 +270,6 @@ The **Rerun** button on any run creates a new run preserving:
 - Target application, tissue, query, constraints
 - The same LLM model (`selected_config`)
 - Redirects to the new run
-
-## Model Management
-
-The main page (`/`) shows an **Available Models** table below the project list.
-
-### Quick Pull
-
-Click **Pull** next to the table header. An inline form opens with a model tag select:
-
-- Downloaded models shown first (marked as `downloaded`)
-- Popular models follow for auto-pull
-- Select a tag, click **Pull** — the model downloads in background and appears in the table with a progress bar
-
-### Add a model (advanced)
-
-Click **Add Model** for full configuration. Two tabs:
-
-**Local (Ollama):**
-
-1. Model tag dropdown: downloaded models shown first (with size), then popular models for auto-pull
-2. Display name: auto-fills from model tag
-3. **Pull & Add**: downloads the model from Ollama registry, saves to DB, redirects to main page
-4. The model shows as `pulling` with an animated progress bar until ready
-
-**API (LiteLLM):**
-
-1. Provider: OpenAI / Anthropic / DeepSeek / Groq / Mistral
-2. Model ID: auto-prefilled (e.g., `openai/gpt-4o`)
-3. API Key: with show/hide toggle
-4. **Test Key**: validates the key with a minimal API call
-5. Display name
-6. **Add Model**: saves to DB (no pull needed for API models)
-
-### Delete a model
-
-Click 🗑 on any model in the table. For Ollama models, this also runs `ollama rm` to free disk space.
-
-## Supported LLM Providers
-
-The system uses **LiteLLM** for unified model access. Supported providers:
-
-| Provider       | Model ID format                     | Env variable        |
-| -------------- | ----------------------------------- | ------------------- |
-| Ollama (local) | `ollama/qwen2.5:7b`                 | `OLLAMA_BASE_URL`   |
-| OpenAI         | `openai/gpt-4o`                     | `OPENAI_API_KEY`    |
-| Anthropic      | `anthropic/claude-3-haiku-20240307` | `ANTHROPIC_API_KEY` |
-| DeepSeek       | `deepseek/deepseek-chat`            | `DEEPSEEK_API_KEY`  |
-| Groq           | `groq/llama-3.3-70b-versatile`      | `GROQ_API_KEY`      |
-| Mistral        | `mistral/mistral-large-latest`      | `MISTRAL_API_KEY`   |
-
-API keys for non-Ollama models are stored in the database and passed to LiteLLM at runtime.
 
 ## Agent Evaluation
 
