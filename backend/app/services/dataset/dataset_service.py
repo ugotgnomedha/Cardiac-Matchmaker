@@ -112,8 +112,10 @@ class DatasetService:
         )
         try:
             DataPreparationService().ingest_dataset_version(getattr(version, "id"), path)
-        except Exception:
-            pass
+        except Exception as exc:
+            version.status = "failed"  # pyrefly: ignore
+            version.save()
+            raise DatasetServiceError(f"ingestion failed: {exc}") from exc
 
     def _to_read_model(self, dataset: Dataset) -> DatasetRead:
         return DatasetRead(
