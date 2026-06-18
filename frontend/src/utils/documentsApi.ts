@@ -46,7 +46,6 @@ export function deleteDocument(projectId: string, documentId: string) {
 }
 
 export interface IndexDocumentResult {
-  chunks: number;
   status: string;
 }
 

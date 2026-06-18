@@ -261,7 +261,7 @@ EXPECTED_MODEL_CONFIG_COLUMNS = {
     "name",
     "provider",
     "model_id",
-    "api_key_encrypted",
+    "api_key",
     "is_active",
     "status",
     "metadata_",
@@ -578,6 +578,8 @@ def apply_model_config_schema(_migrator: PostgresqlMigrator) -> None:
     db.create_tables([ModelConfig], safe=True)
     if table_exists(MODEL_CONFIG_TABLE_NAME) and "status" not in get_table_columns(MODEL_CONFIG_TABLE_NAME):
         db.execute_sql(f'ALTER TABLE "{MODEL_CONFIG_TABLE_NAME}" ADD COLUMN status VARCHAR(50) DEFAULT \'ready\'')
+    if table_exists(MODEL_CONFIG_TABLE_NAME) and "api_key_encrypted" in get_table_columns(MODEL_CONFIG_TABLE_NAME) and "api_key" not in get_table_columns(MODEL_CONFIG_TABLE_NAME):
+        db.execute_sql(f'ALTER TABLE "{MODEL_CONFIG_TABLE_NAME}" RENAME COLUMN api_key_encrypted TO api_key')
     raise_partial_schema_error("Model config", MODEL_CONFIG_TABLE_EXPECTATIONS)
 
 

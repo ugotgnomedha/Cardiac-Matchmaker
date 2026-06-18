@@ -14,7 +14,7 @@ class ModelConfig(BaseModel):
     name = CharField(max_length=255)
     provider = CharField(max_length=20)
     model_id = CharField(max_length=255)
-    api_key_encrypted = TextField(null=True)
+    api_key = TextField(null=True)
     is_active = BooleanField(default=True)
     status = CharField(max_length=50, default="ready")
     metadata_ = JSONField(null=True)

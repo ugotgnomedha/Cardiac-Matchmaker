@@ -13,6 +13,8 @@ Wait for all 6 services to become healthy: `backend`, `worker`, `db`, `vector-db
 
 ## Architecture
 
+### Services
+
 ```
 ┌──────────┐    ┌────────┐    ┌──────────┐
 │ Frontend │───▶│Backend │───▶│PostgreSQL│
@@ -33,6 +35,77 @@ Wait for all 6 services to become healthy: `backend`, `worker`, `db`, `vector-db
 - **Ollama**: Local LLM for the reasoning agent
 - **Frontend**: React + TypeScript + HeroUI + SWR
 
+### Agent Loop (LangGraph)
+
+The LLM does NOT produce numbers or citations — the deterministic engine does. The agent only plans, critiques, and narrates.
+
+```
+                    ┌─────────────┐
+                    │   PLANNER   │  ← LLM
+                    │ Drafts 2-5  │
+                    │ step plan   │
+                    └──────┬──────┘
+                           │ plan
+                           ▼
+┌──────────────────────────────────────────────┐
+│                 EXECUTOR                     │
+│  Calls deterministic tools:                 │
+│  • alignment scores & rankings              │
+│  • driver protein extraction                │
+│  • RAG literature lookup                    │
+│  • UniProt function grounding              │
+│  ALL numbers & citations from here          │
+└──────────────────────┬───────────────────────┘
+                       │ findings + drivers
+                       ▼
+                    ┌─────────────┐
+                    │   CRITIC    │  ← LLM
+                    │ Flags       │
+                    │ contradictions│
+                    │ (JSON output)│
+                    └──────┬──────┘
+                           │ approved? ──▶ No ──▶ back to Planner
+                           │ Yes
+                           ▼
+                    ┌─────────────┐
+                    │  REPORTER   │  ← LLM
+                    │ Narrates    │
+                    │ final report│
+                    └─────────────┘
+```
+
+**Design invariant:** the recommendation, rankings, and citations come entirely from the deterministic engine — the LLM only plans, critiques, and narrates, so it cannot change a number or a citation.
+
+### Data Flow
+
+```
+placenta.tsv ──▶ Register Dataset ──▶ auto-ingest ──▶ Sample
+                    (frontend)        (backend)       Measurement
+                                                      FeatureAnnotation
+                                                           │
+                                                           ▼
+User creates Run ──▶ ProcessingJob ──▶ Worker picks up ──▶ AnalysisService.run()
+ (frontend)           (queued)                             │
+                                                           │
+                    ┌──────────────────────────────────────┘
+                    ▼
+             1. load_proteomics   ← reads Sample/Measurement from DB
+                    │
+                    ▼
+             2. align (CCA)       ← domain adaptation: log2(2-7) vs log2(20-30)
+                    │                scores prep×region cosine similarity
+                    ▼
+             3. retrieve_and_ground ← RAG (Qdrant) + UniProt
+                    │                ranked candidates + driver proteins + citations
+                    ▼
+             4. agent_reasoning   ← LangGraph Planner→Executor→Critic→Reporter
+                    │                (LLM via LiteLLM: Ollama / OpenAI / DeepSeek / ...)
+                    ▼
+             Decision Report      ← markdown + JSON with rankings, drivers, caveats
+              (persisted to DB,   ← viewable at /runs/:id/report
+               viewable in UI)
+```
+
 ## First Launch
 
 ### 1. Create a user
@@ -48,6 +121,7 @@ Open `http://localhost:3000` and log in.
 On the main page, click **Pull** in the **Available Models** section, select a model tag (e.g., `qwen2.5:7b`), and click **Pull**. The model downloads in the background and appears in the table with a progress bar.
 
 You can also pull via CLI:
+
 ```bash
 docker compose exec ollama ollama pull qwen2.5:7b
 ```
@@ -64,60 +138,37 @@ cp datasets/placenta_annotated_forAnalysis.txt data/placenta.tsv
 
 ### Create a Project
 
-On the main page `/`, fill in the project name and description, click **Create Project**.
+On the main page , fill in the project name and description, click **Create Project**.
 
 ### Register a Dataset
 
 Inside a project, click **Register Dataset**:
 
-| Field | Value |
-|-------|-------|
-| Dataset name | `Placenta proteomics` |
-| Dataset type | `placenta` |
-| Original filename | `placenta.tsv` |
-| Storage path | `/data/placenta.tsv` |
+| Field             | Value                   |
+| ----------------- | ----------------------- |
+| Dataset name      | `Placenta proteomics`   |
+| Dataset type      | `Placenta-heart merged` |
+| Original filename | `placenta.tsv`          |
+| Storage path      | `/data/placenta.tsv`    |
 
-The backend validates that the file exists before accepting the registration.
+The backend validates that the file exists, then automatically creates a dataset version and runs ingestion — parsing the TSV into samples, measurements, and feature annotations.
 
 Click the **edit** (✏️) icon to modify dataset metadata later, or **delete** (🗑) to remove it.
-
-### Ingest the Dataset
-
-After registration, run the ingestion command to parse the TSV into the database:
-
-```bash
-docker compose exec backend python -c "
-from uuid import uuid4
-from app.models.base.base_model import db
-from app.models.dataset.dataset_model import Dataset, DatasetVersion
-import datetime
-
-db.connect(reuse_if_open=True)
-now = datetime.datetime.now(datetime.timezone.utc)
-placenta = Dataset.get(Dataset.name == 'Placenta proteomics')
-v = DatasetVersion.create(id=uuid4(), dataset=placenta, version_number='v1', status='raw', storage_path='/data/placenta.tsv', created_at=now)
-print(f'Version ID: {v.id}')
-db.close()
-"
-```
-
-```bash
-docker compose exec backend python -m app.cmd.ingest_dataset <VERSION_ID> /data/placenta.tsv
-```
 
 ### Register a Document
 
 Inside a project, click **Register Document**:
 
-| Field | Value |
-|-------|-------|
-| Document title | `Heart Map — Doll et al.` |
-| Original filename | `heart-map.pdf` |
-| Storage path | `/data/pdfs/heart-map.pdf` |
+| Field             | Value                      |
+| ----------------- | -------------------------- |
+| Document title    | `Heart Map — Doll et al.`  |
+| Original filename | `heart-map.pdf`            |
+| Storage path      | `/data/pdfs/heart-map.pdf` |
 
 ### Index the Document
 
 Click the **reload** (🔄) icon next to the document. This enqueues a background job that:
+
 1. Extracts text from the PDF
 2. Chunks it into ~500-token segments
 3. Embeds with MiniLM and stores in Qdrant
@@ -129,13 +180,13 @@ The main page shows real-time status between runs.
 
 Inside a project, click **New Run**:
 
-| Field | Value |
-|-------|-------|
-| Target application | `myocardial patch` |
-| Target tissue | `left ventricle` |
-| Research query | `Find the best placental material for myocardial patch support.` |
-| Constraints JSON | `{"structure": "Ventricle"}` |
-| Model | Select from dropdown |
+| Field              | Value                                                            |
+| ------------------ | ---------------------------------------------------------------- |
+| Target application | `myocardial patch`                                               |
+| Target tissue      | `left ventricle`                                                 |
+| Research query     | `Find the best placental material for myocardial patch support.` |
+| Constraints JSON   | `{"structure": "Ventricle"}`                                     |
+| Model              | Select from dropdown                                             |
 
 The Model dropdown shows all registered models. If only one is configured, it's auto-selected as readonly. If none, a warning guides you to add one first.
 
@@ -162,6 +213,7 @@ Click **Report** to view the Decision Report with recommendations, drivers, and 
 ### Rerun
 
 The **Rerun** button on any run creates a new run preserving:
+
 - Target application, tissue, query, constraints
 - The same LLM model (`selected_config`)
 - Redirects to the new run
@@ -173,6 +225,7 @@ The main page (`/`) shows an **Available Models** table below the project list.
 ### Quick Pull
 
 Click **Pull** next to the table header. An inline form opens with a model tag select:
+
 - Downloaded models shown first (marked as `downloaded`)
 - Popular models follow for auto-pull
 - Select a tag, click **Pull** — the model downloads in background and appears in the table with a progress bar
@@ -182,12 +235,14 @@ Click **Pull** next to the table header. An inline form opens with a model tag s
 Click **Add Model** for full configuration. Two tabs:
 
 **Local (Ollama):**
+
 1. Model tag dropdown: downloaded models shown first (with size), then popular models for auto-pull
 2. Display name: auto-fills from model tag
 3. **Pull & Add**: downloads the model from Ollama registry, saves to DB, redirects to main page
 4. The model shows as `pulling` with an animated progress bar until ready
 
 **API (LiteLLM):**
+
 1. Provider: OpenAI / Anthropic / DeepSeek / Groq / Mistral
 2. Model ID: auto-prefilled (e.g., `openai/gpt-4o`)
 3. API Key: with show/hide toggle
@@ -203,14 +258,14 @@ Click 🗑 on any model in the table. For Ollama models, this also runs `ollama 
 
 The system uses **LiteLLM** for unified model access. Supported providers:
 
-| Provider | Model ID format | Env variable |
-|----------|----------------|-------------|
-| Ollama (local) | `ollama/qwen2.5:7b` | `OLLAMA_BASE_URL` |
-| OpenAI | `openai/gpt-4o` | `OPENAI_API_KEY` |
-| Anthropic | `anthropic/claude-3-haiku-20240307` | `ANTHROPIC_API_KEY` |
-| DeepSeek | `deepseek/deepseek-chat` | `DEEPSEEK_API_KEY` |
-| Groq | `groq/llama-3.3-70b-versatile` | `GROQ_API_KEY` |
-| Mistral | `mistral/mistral-large-latest` | `MISTRAL_API_KEY` |
+| Provider       | Model ID format                     | Env variable        |
+| -------------- | ----------------------------------- | ------------------- |
+| Ollama (local) | `ollama/qwen2.5:7b`                 | `OLLAMA_BASE_URL`   |
+| OpenAI         | `openai/gpt-4o`                     | `OPENAI_API_KEY`    |
+| Anthropic      | `anthropic/claude-3-haiku-20240307` | `ANTHROPIC_API_KEY` |
+| DeepSeek       | `deepseek/deepseek-chat`            | `DEEPSEEK_API_KEY`  |
+| Groq           | `groq/llama-3.3-70b-versatile`      | `GROQ_API_KEY`      |
+| Mistral        | `mistral/mistral-large-latest`      | `MISTRAL_API_KEY`   |
 
 API keys for non-Ollama models are stored in the database and passed to LiteLLM at runtime.
 
@@ -229,6 +284,7 @@ docker compose exec backend python -m tests.model_evaluation --model ollama/qwen
 ```
 
 Measures 7 quality metrics:
+
 - **Plan validity** — agent produces ≥2 actionable steps
 - **Critic JSON parse** — critic returns valid JSON
 - **Contradiction recall** — critic flags planted contaminants (FGB)
@@ -249,24 +305,24 @@ cd frontend && npm run lint && npm run build
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `POSTGRES_USER` | postgres | Database user |
-| `POSTGRES_PASSWORD` | postgres | Database password |
-| `POSTGRES_DB` | postgres | Database name |
-| `POSTGRES_HOST` | db (Docker) / localhost | Database host |
-| `POSTGRES_PORT` | 5432 | Database port |
-| `JWT_SECRET_KEY` | — | JWT signing key |
-| `JWT_ALGORITHM` | HS256 | JWT algorithm |
-| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | 180 | Token expiry |
-| `MATCHMAKER_LLM` | ollama/qwen2.5:7b | Default LLM model |
-| `OLLAMA_BASE_URL` | http://ollama:11434 | Ollama API URL |
-| `QDRANT_URL` | http://vector-db:6333 | Qdrant URL |
-| `FRONTEND_ORIGIN` | http://localhost:3000 | CORS origin |
+| Variable                          | Default                 | Description       |
+| --------------------------------- | ----------------------- | ----------------- |
+| `POSTGRES_USER`                   | postgres                | Database user     |
+| `POSTGRES_PASSWORD`               | postgres                | Database password |
+| `POSTGRES_DB`                     | postgres                | Database name     |
+| `POSTGRES_HOST`                   | db (Docker) / localhost | Database host     |
+| `POSTGRES_PORT`                   | 5432                    | Database port     |
+| `JWT_SECRET_KEY`                  | —                       | JWT signing key   |
+| `JWT_ALGORITHM`                   | HS256                   | JWT algorithm     |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | 180                     | Token expiry      |
+| `MATCHMAKER_LLM`                  | ollama/qwen2.5:7b       | Default LLM model |
+| `OLLAMA_BASE_URL`                 | http://ollama:11434     | Ollama API URL    |
+| `QDRANT_URL`                      | http://vector-db:6333   | Qdrant URL        |
+| `FRONTEND_ORIGIN`                 | http://localhost:3000   | CORS origin       |
 
 ## Troubleshooting
 
-**Run fails with "no dataset version found"** — register the dataset, then run the ingestion command. The dataset must have a `DatasetVersion` with status `normalized`.
+**Run fails with "no dataset version found"** — re-register the dataset. Ingestion runs automatically on registration.
 
 **Index document doesn't work** — ensure `storage_path` starts with `/` (e.g., `/data/pdfs/heart-map.pdf` not `data/pdfs/...`). Indexing runs in the worker container which has `sentence-transformers`.
 

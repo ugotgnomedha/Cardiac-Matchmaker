@@ -83,12 +83,14 @@ class QdrantVectorStore:
 
     def delete_by_document(self, document_id: str) -> None:
         """Delete all vectors for a document from Qdrant."""
-        from qdrant_client.models import FieldCondition, Filter, MatchValue
+        from qdrant_client.models import FieldCondition, Filter, FilterSelector, MatchValue
 
         self.client.delete(
             collection_name=self.collection,
-            points_selector=Filter(
-                must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+            points_selector=FilterSelector(
+                filter=Filter(
+                    must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+                ),
             ),
         )
 

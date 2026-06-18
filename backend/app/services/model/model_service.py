@@ -55,35 +55,40 @@ class ModelService:
             name=payload.name,
             provider=payload.provider,
             model_id=model_id,
-            api_key_encrypted=payload.api_key,
+            api_key=payload.api_key,
             status=status,
         )
         if payload.provider == "ollama":
-            threading.Thread(target=self._pull_and_update, args=(str(model.id), payload.model_id), daemon=True).start()
+            threading.Thread(target=self._pull_and_update, args=(model.id, payload.model_id), daemon=True).start()
         return self._to_read(model)
 
-    def _pull_and_update(self, model_id: str, tag: str) -> None:
+    def _pull_and_update(self, model_id: UUID, tag: str) -> None:
         try:
             r = httpx.post(f"{OLLAMA_URL}/api/pull", json={"name": tag, "stream": False}, timeout=600)
             r.raise_for_status()
-            db.connect(reuse_if_open=True)
-            model = ModelConfig.get_by_id(model_id)
-            model.status = "ready"
-            model.save()
+            with db.connection_context():
+                model = ModelConfig.get_or_none(ModelConfig.id == model_id)
+                if model:
+                    model.status = "ready"
+                    model.save()
         except Exception:
-            db.connect(reuse_if_open=True)
-            model = ModelConfig.get_by_id(model_id)
-            if model:
-                model.status = "error"
-                model.save()
+            try:
+                with db.connection_context():
+                    model = ModelConfig.get_or_none(ModelConfig.id == model_id)
+                    if model:
+                        model.status = "error"
+                        model.save()
+            except Exception:
+                pass
 
     def delete_model(self, model_id: UUID) -> None:
         model = self.repository.get(model_id)
         if model is None:
             raise ModelServiceError(f"model {model_id} not found")
         if model.provider == "ollama":
+            tag = model.model_id.removeprefix("ollama/")
             try:
-                self._delete_ollama_model(model.model_id)
+                self._delete_ollama_model(tag)
             except Exception:
                 pass
         self.repository.delete(model)

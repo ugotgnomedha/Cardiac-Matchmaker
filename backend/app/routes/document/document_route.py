@@ -20,7 +20,9 @@ def _raise_document_http_error(exc: Exception) -> NoReturn:
     if isinstance(exc, ProjectNotFoundError):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.detail) from exc
     if isinstance(exc, DocumentServiceError):
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=exc.detail) from exc
+        detail = str(exc.detail)
+        status_code = status.HTTP_404_NOT_FOUND if "not found" in detail else status.HTTP_500_INTERNAL_SERVER_ERROR
+        raise HTTPException(status_code=status_code, detail=detail) from exc
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="unexpected document service error") from exc
 
 
@@ -61,7 +63,7 @@ def index_document(project_id: UUID, document_id: UUID):
     from app.models.job.job_model import ProcessingJob
 
     document = Document.get_or_none(Document.id == document_id)
-    if document is None:
+    if document is None or getattr(document, "project_id") != project_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"document {document_id} not found")
 
     with db.atomic():
