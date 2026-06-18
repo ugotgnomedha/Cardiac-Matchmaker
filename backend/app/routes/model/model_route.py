@@ -2,6 +2,7 @@ from typing import NoReturn
 from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 import httpx
 import json
 from app.services.model.model_service import (
@@ -13,9 +14,21 @@ model_router = APIRouter(prefix="/models", tags=["models"])
 model_service = ModelService()
 
 
+class PullPayload(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+
+
+class TestKeyPayload(BaseModel):
+    provider: str = Field(min_length=1)
+    model_id: str = Field(min_length=1)
+    api_key: str = Field(min_length=1)
+
+
 def _raise_http(exc: Exception) -> NoReturn:
     if isinstance(exc, ModelServiceError):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc.detail)) from exc
+        detail = str(exc.detail)
+        status_code = status.HTTP_404_NOT_FOUND if "not found" in detail else status.HTTP_422_UNPROCESSABLE_ENTITY
+        raise HTTPException(status_code=status_code, detail=detail) from exc
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="unexpected error") from exc
 
 
@@ -43,24 +56,22 @@ def delete_model(model_id: UUID):
 @model_router.get("/ollama/list")
 def list_ollama_models():
     try:
-        return model_service.list_ollama_models()
+        return {"models": model_service.list_ollama_models()}
     except ModelServiceError as exc:
         _raise_http(exc)
 
 
 @model_router.post("/ollama/pull")
-def pull_ollama_model(payload: dict):
+def pull_ollama_model(payload: PullPayload):
     try:
-        return model_service.pull_ollama_model(payload["name"])
+        return model_service.pull_ollama_model(payload.name)
     except ModelServiceError as exc:
         _raise_http(exc)
 
 
 @model_router.post("/ollama/pull/stream")
-async def pull_ollama_model_stream(payload: dict):
-    name = payload.get("name", "")
-    if not name:
-        raise HTTPException(status_code=422, detail="name is required")
+async def pull_ollama_model_stream(payload: PullPayload):
+    name = payload.name
 
     async def event_stream():
         async with httpx.AsyncClient(timeout=600) as client:
@@ -84,10 +95,10 @@ async def pull_ollama_model_stream(payload: dict):
 
 
 @model_router.post("/test-key")
-def test_api_key(payload: dict):
+def test_api_key(payload: TestKeyPayload):
     try:
         return model_service.test_litellm_key(
-            payload["provider"], payload["model_id"], payload["api_key"]
+            payload.provider, payload.model_id, payload.api_key
         )
     except ModelServiceError as exc:
         _raise_http(exc)

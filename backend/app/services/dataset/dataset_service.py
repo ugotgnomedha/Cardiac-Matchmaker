@@ -67,12 +67,15 @@ class DatasetService:
             storage_path=payload.storage_path,
             metadata=payload.metadata,
         )
+
+        self._ingest(dataset)
+
         return self._to_read_model(dataset)
 
     def delete_dataset(self, project_id: UUID, dataset_id: UUID) -> None:
         self.project_service.get_project_model(project_id)
         dataset = self.dataset_repository.get(dataset_id)
-        if dataset is None:
+        if dataset is None or getattr(dataset, "project_id") != project_id:
             raise DatasetServiceError(f"dataset {dataset_id} not found")
         self.dataset_repository.delete(dataset)
 
@@ -83,7 +86,7 @@ class DatasetService:
     def update_dataset(self, project_id: UUID, dataset_id: UUID, payload: DatasetUpdatePayload) -> DatasetRead:
         self.project_service.get_project_model(project_id)
         dataset = self.dataset_repository.get(dataset_id)
-        if dataset is None:
+        if dataset is None or getattr(dataset, "project_id") != project_id:
             raise DatasetServiceError(f"dataset {dataset_id} not found")
         values = payload.model_dump(exclude_none=True)
         if not values:
@@ -92,6 +95,26 @@ class DatasetService:
             raise DatasetServiceError(f"file not found: {values['storage_path']}")
         updated = self.dataset_repository.update(dataset, values)
         return self._to_read_model(updated)
+
+    def _ingest(self, dataset: Dataset) -> None:
+        from pathlib import Path
+        from uuid import uuid4
+        from app.models.dataset.dataset_model import DatasetVersion
+        from app.services.data_preparation.data_preparation_service import DataPreparationService
+
+        path = Path(str(getattr(dataset, "storage_path")))
+        suffix = path.suffix or ".tsv"
+        version = DatasetVersion.create(
+            id=uuid4(),
+            dataset=dataset,
+            version_number="1",
+            status="raw",
+            storage_path=str(path),
+        )
+        try:
+            DataPreparationService().ingest_dataset_version(getattr(version, "id"), path)
+        except Exception:
+            pass
 
     def _to_read_model(self, dataset: Dataset) -> DatasetRead:
         return DatasetRead(

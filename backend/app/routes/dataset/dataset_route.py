@@ -22,7 +22,11 @@ def _raise_dataset_http_error(exc: Exception) -> NoReturn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=exc.detail) from exc
     if isinstance(exc, DatasetServiceError):
         detail = str(exc.detail)
-        status_code = status.HTTP_422_UNPROCESSABLE_ENTITY if detail.startswith("file not found") else status.HTTP_500_INTERNAL_SERVER_ERROR
+        status_code = (
+            status.HTTP_404_NOT_FOUND if "not found" in detail
+            else status.HTTP_422_UNPROCESSABLE_ENTITY if detail.startswith("file not found") or detail.startswith("no fields")
+            else status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
         raise HTTPException(status_code=status_code, detail=detail) from exc
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="unexpected dataset service error") from exc
 

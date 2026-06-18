@@ -17,5 +17,5 @@ torch==2.8.0
 langchain-core==0.3.81
 langgraph==0.6.11
 langchain-ollama==0.3.10
-langchain-community
+langchain-community==0.3.19
 litellm==1.80.0

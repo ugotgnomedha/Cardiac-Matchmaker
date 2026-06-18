@@ -43,25 +43,28 @@ async def auth_middleware(request: Request, call_next):
 
     token = request.cookies.get("access_token")
     if not token:
-        return _cors_401()
+        return _cors_401(request)
 
     try:
         request.state.user = auth_service.verify_access_token(token)
     except InvalidTokenError:
-        return _cors_401()
+        return _cors_401(request)
     except AuthServiceError:
-        resp = JSONResponse(status_code=500, content={"detail": "Auth service error"})
-        resp.headers["Access-Control-Allow-Origin"] = request.headers.get("origin", "*")
-        resp.headers["Access-Control-Allow-Credentials"] = "true"
-        return resp
+        return _cors_error(request, 500, "Auth service error")
 
     return await call_next(request)
 
 
-def _cors_401() -> JSONResponse:
-    resp = JSONResponse(status_code=401, content={"detail": "Unauthorized"})
-    resp.headers["Access-Control-Allow-Origin"] = frontend_origins[0] if frontend_origins else "*"
-    resp.headers["Access-Control-Allow-Credentials"] = "true"
+def _cors_401(request: Request) -> JSONResponse:
+    return _cors_error(request, 401, "Unauthorized")
+
+
+def _cors_error(request: Request, status_code: int, detail: str) -> JSONResponse:
+    resp = JSONResponse(status_code=status_code, content={"detail": detail})
+    origin = request.headers.get("origin", "")
+    if origin:
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Access-Control-Allow-Credentials"] = "true"
     return resp
 
 

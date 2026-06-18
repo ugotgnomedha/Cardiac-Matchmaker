@@ -10,10 +10,9 @@ Usage:
 """
 
 import argparse
-import json
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import uuid4
 
 import numpy as np

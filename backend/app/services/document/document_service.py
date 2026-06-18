@@ -58,7 +58,7 @@ class DocumentService:
     def delete_document(self, project_id: UUID, document_id: UUID) -> None:
         self.project_service.get_project_model(project_id)
         document = self.document_repository.get(document_id)
-        if document is None:
+        if document is None or getattr(document, "project_id") != project_id:
             raise DocumentServiceError(f"document {document_id} not found")
         try:
             from app.services.analysis.rag_store import QdrantVectorStore
