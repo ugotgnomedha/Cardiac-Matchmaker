@@ -11,9 +11,9 @@ def _lookup_api_key(model_id: str) -> str | None:
         from app.models.base.base_model import db
         from app.models.model.model_config_model import ModelConfig
 
-        db.connect(reuse_if_open=True)
-        row = ModelConfig.get_or_none(ModelConfig.model_id == model_id)
-        return row.api_key if row else None
+        with db.connection_context():
+            row = ModelConfig.get_or_none(ModelConfig.model_id == model_id)
+            return row.api_key if row else None
     except Exception:
         return None
 

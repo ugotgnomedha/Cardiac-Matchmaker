@@ -66,18 +66,18 @@ class ModelService:
         try:
             r = httpx.post(f"{OLLAMA_URL}/api/pull", json={"name": tag, "stream": False}, timeout=600)
             r.raise_for_status()
-            db.connect(reuse_if_open=True)
-            model = ModelConfig.get_or_none(ModelConfig.id == model_id)
-            if model:
-                model.status = "ready"
-                model.save()
-        except Exception:
-            try:
-                db.connect(reuse_if_open=True)
+            with db.connection_context():
                 model = ModelConfig.get_or_none(ModelConfig.id == model_id)
                 if model:
-                    model.status = "error"
+                    model.status = "ready"
                     model.save()
+        except Exception:
+            try:
+                with db.connection_context():
+                    model = ModelConfig.get_or_none(ModelConfig.id == model_id)
+                    if model:
+                        model.status = "error"
+                        model.save()
             except Exception:
                 pass
 
