@@ -182,7 +182,11 @@ export function ProjectsPage() {
                 <button
                   className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-rose-50 hover:text-rose-600"
                   onClick={async () => {
-                    await deleteModelApi(m.id);
+                    try {
+                      await deleteModelApi(m.id);
+                    } catch {
+                      // ignore — delete will be retried on next page load
+                    }
                     mutate("/api/v1/models");
                   }}
                   title="Remove model"
