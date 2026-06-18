@@ -172,9 +172,13 @@ export function ProjectsPage() {
                     {m.provider === "ollama" ? "Ollama" : "LiteLLM"} · {m.model_id}
                   </span>
                   {m.status === "pulling" ? (
-                    <div className="mt-1 h-1.5 w-full rounded-full bg-zinc-200">
-                      <div className="h-1.5 animate-pulse rounded-full bg-teal-600/50 w-full" />
-                    </div>
+                    <span className="text-xs text-zinc-500 inline-flex items-center gap-1">
+                      <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      pulling...
+                    </span>
                   ) : m.status === "error" ? (
                     <span className="text-xs text-rose-600">Pull failed</span>
                   ) : null}
