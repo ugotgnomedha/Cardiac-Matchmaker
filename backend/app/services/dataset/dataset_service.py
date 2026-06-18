@@ -103,7 +103,6 @@ class DatasetService:
         from app.services.data_preparation.data_preparation_service import DataPreparationService
 
         path = Path(str(getattr(dataset, "storage_path")))
-        suffix = path.suffix or ".tsv"
         version = DatasetVersion.create(
             id=uuid4(),
             dataset=dataset,
