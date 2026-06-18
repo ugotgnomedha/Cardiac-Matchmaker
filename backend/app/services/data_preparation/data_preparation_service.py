@@ -1,6 +1,6 @@
 import csv
 import datetime
-import os
+import sys
 from pathlib import Path
 from typing import Any, Iterator
 from uuid import UUID, uuid4
@@ -68,7 +68,10 @@ class DataPreparationService:
 
         return run
 
+    BATCH_SIZE = 5000
+
     def _parse_and_store(self, dataset_version_id: UUID, file_path: Path, run: PreprocessingRun) -> None:
+        csv.field_size_limit(sys.maxsize)
         with open(file_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f, delimiter="\t")
             if not reader.fieldnames:
@@ -76,8 +79,8 @@ class DataPreparationService:
 
             sample_columns = [col for col in reader.fieldnames if col not in self.METADATA_COLUMNS]
 
-            sample_map = {}  # column_name -> Sample instance
-            annotations: dict[str, dict[str, Any]] = {}  # GeneName -> annotation fields
+            # Phase 1: create samples (small, ~30 entries)
+            sample_map: dict[str, Sample] = {}
             with db.atomic():
                 for col in sample_columns:
                     sample_type = "heart_region" if any(pat in col for pat in self.HEART_SAMPLE_PATTERNS) else "placenta_region"
@@ -90,38 +93,51 @@ class DataPreparationService:
                     )
                     sample_map[col] = sample
 
-                for row_num, row in enumerate(reader, start=2):  # row 1 is header
-                    gene_name = row.get("GeneName", "").strip()
-                    if not gene_name:
-                        continue  # skip rows without gene name
+            # Phase 2: batch-insert measurements
+            annotations: dict[str, dict[str, Any]] = {}
+            batch: list[dict] = []
+            for row in reader:
+                gene_name = row.get("GeneName", "").strip()
+                if not gene_name:
+                    continue
+                self._collect_annotation(annotations, gene_name, row)
 
-                    self._collect_annotation(annotations, gene_name, row)
+                for col, value in row.items():
+                    if col not in sample_map:
+                        continue
+                    if value in (None, "", "NA"):
+                        continue
+                    try:
+                        raw_val = float(value)
+                    except (ValueError, TypeError):
+                        continue
 
-                    for col, value in row.items():
-                        if col not in sample_map:
-                            continue  # skip metadata columns
-                        if value in (None, "", "NA"):
-                            continue
-                        try:
-                            raw_val = float(value)
-                        except (ValueError, TypeError):
-                            continue  # skip non‑numeric values
+                    batch.append({
+                        "id": uuid4(),
+                        "sample": sample_map[col],
+                        "feature_name": gene_name,
+                        "raw_value": raw_val,
+                        "normalized_value": None,
+                        "unit": "log2 intensity",
+                    })
 
-                        Measurement.create(
-                            id=uuid4(),
-                            sample=sample_map[col],
-                            feature_name=gene_name,
-                            raw_value=raw_val,
-                            normalized_value=None,
-                            unit="log2 intensity",
-                        )
+                    if len(batch) >= self.BATCH_SIZE:
+                        with db.atomic():
+                            Measurement.insert_many(batch).execute()
+                        batch.clear()
 
-                self._store_annotations(dataset_version_id, annotations)
+            # Flush remaining
+            if batch:
+                with db.atomic():
+                    Measurement.insert_many(batch).execute()
 
-            # update the DatasetVersion status
-            dataset_version = DatasetVersion.get_by_id(dataset_version_id)
-            dataset_version.status = "normalized"  # pyrefly: ignore
-            dataset_version.save()
+            # Phase 3: store annotations
+            self._store_annotations(dataset_version_id, annotations)
+
+        # update the DatasetVersion status
+        dataset_version = DatasetVersion.get_by_id(dataset_version_id)
+        dataset_version.status = "normalized"  # pyrefly: ignore
+        dataset_version.save()
 
     def _collect_annotation(self, annotations: dict[str, dict[str, Any]], gene_name: str, row: dict[str, Any]) -> None:
         """Accumulate one feature's annotation from a TSV row.
